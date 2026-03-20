@@ -2,9 +2,15 @@ import "dotenv/config";
 import express from "express";
 import multer from "multer";
 import OpenAI from "openai";
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  addHistoryEntry,
+  addWord,
+  deleteWord,
+  getBootstrap,
+  updateReviewCount,
+} from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,9 +21,6 @@ const port = Number(process.env.PORT || 4173);
 const textModel = process.env.OPENAI_TEXT_MODEL || "gpt-5-mini";
 const transcribeModel =
   process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
-const dataDir = path.join(__dirname, "data");
-const promptsPath = path.join(dataDir, "prompts.json");
-const dbPath = path.join(dataDir, "db.json");
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -27,17 +30,10 @@ app.use(express.json({ limit: "4mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
-const prompts = JSON.parse(fs.readFileSync(promptsPath, "utf8"));
-
 app.get("/api/bootstrap", (_req, res) => {
-  const db = readDb();
-  const todayPrompt = getPromptForDate(new Date(), prompts);
   res.json({
     configured: Boolean(openai),
-    todayPrompt,
-    readingList: db.readingList,
-    speakingList: db.speakingList,
-    history: db.history,
+    ...getBootstrap(formatIsoDate(new Date())),
   });
 });
 
@@ -56,70 +52,45 @@ app.post("/api/words", (req, res) => {
     return res.status(400).json({ error: "word and listName are required." });
   }
 
-  const db = readDb();
-  const key = listName === "reading" ? "readingList" : "speakingList";
-  if (!db[key].some((entry) => normalizeWord(entry.word) === normalizeWord(word))) {
-    const base = buildWordEntry(word, savedAt || formatIsoDate(new Date()));
-    db[key].unshift(base);
-    writeDb(db);
-  }
+  const list = addWord({
+    listName,
+    word,
+    savedAt: savedAt || formatIsoDate(new Date()),
+    ...defaultWordLibrary[word],
+  });
 
-  res.json({ list: db[key] });
+  res.json({ list });
 });
 
 app.delete("/api/words/:listName/:word", (req, res) => {
   const { listName, word } = req.params;
-  const db = readDb();
-  const key = listName === "reading" ? "readingList" : "speakingList";
-  db[key] = db[key].filter(
-    (entry) => normalizeWord(entry.word) !== normalizeWord(decodeURIComponent(word))
-  );
-  writeDb(db);
-  res.json({ list: db[key] });
+  const list = deleteWord(listName, decodeURIComponent(word));
+  res.json({ list });
 });
 
 app.post("/api/review/reading", (req, res) => {
   const { word, result } = req.body;
-  const db = readDb();
-  const item = db.readingList.find(
-    (entry) => normalizeWord(entry.word) === normalizeWord(word || "")
-  );
-  if (!item) {
-    return res.status(404).json({ error: "Word not found in reading list." });
-  }
-  if (result === "right") item.rightCount += 1;
-  else item.wrongCount += 1;
-  writeDb(db);
-  res.json({ item, list: db.readingList });
+  const list = updateReviewCount("reading", word, result === "right");
+  res.json({ list });
 });
 
 app.post("/api/review/speaking", (req, res) => {
   const { word, matched } = req.body;
-  const db = readDb();
-  const item = db.speakingList.find(
-    (entry) => normalizeWord(entry.word) === normalizeWord(word || "")
-  );
-  if (!item) {
-    return res.status(404).json({ error: "Word not found in speaking list." });
-  }
-  if (matched) item.rightCount += 1;
-  else item.wrongCount += 1;
-  writeDb(db);
-  res.json({ item, list: db.speakingList });
+  const list = updateReviewCount("speaking", word, Boolean(matched));
+  res.json({ list });
 });
 
 app.post("/api/history", (req, res) => {
   const { title, summary, image, date } = req.body;
-  const db = readDb();
-  db.history.unshift({
+  const bootstrap = getBootstrap(formatIsoDate(new Date()));
+  const history = addHistoryEntry({
     id: `hist-${Date.now()}`,
     title: title || "Practice",
     summary: summary || "",
-    image: image || getPromptForDate(new Date(), prompts).image,
+    image: image || bootstrap.todayPrompt.image,
     date: date || formatIsoDate(new Date()),
   });
-  writeDb(db);
-  res.json({ history: db.history });
+  res.json({ history });
 });
 
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
@@ -211,7 +182,7 @@ app.post("/api/judge-word", upload.single("audio"), async (req, res) => {
       model: textModel,
       instructions:
         "You are an English pronunciation coach. Return only valid JSON with keys score and feedback. score must be an integer 0-100. feedback must be one short sentence. Base your judgment on the target word and the transcribed heard word, and be honest that this is an approximate speaking check.",
-      input: `Target word: ${targetWord}\nTranscribed spoken attempt: ${heard || "(empty)" }\nSuggested baseline score: ${score}`,
+      input: `Target word: ${targetWord}\nTranscribed spoken attempt: ${heard || "(empty)"}\nSuggested baseline score: ${score}`,
     });
 
     const parsed = safeJson(response.output_text);
@@ -261,40 +232,42 @@ function normalizeWord(value) {
   return value.toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
 
+function similarityScore(target, heard) {
+  const a = normalizeWord(target);
+  const b = normalizeWord(heard);
+  if (!a || !b) return 20;
+  if (a === b) return 94;
+  if (b.includes(a) || a.includes(b)) return 84;
+  const distance = levenshtein(a, b);
+  const maxLen = Math.max(a.length, b.length, 1);
+  return clamp(Math.round((1 - distance / maxLen) * 100), 20, 90);
+}
+
+function levenshtein(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, () =>
+    new Array(b.length + 1).fill(0)
+  );
+  for (let i = 0; i <= a.length; i += 1) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function formatIsoDate(date) {
   return date.toISOString().slice(0, 10);
-}
-
-function getPromptForDate(date, allPrompts) {
-  const dayIndex = Math.floor(date.getTime() / 86400000);
-  return allPrompts[dayIndex % allPrompts.length];
-}
-
-function readDb() {
-  return JSON.parse(fs.readFileSync(dbPath, "utf8"));
-}
-
-function writeDb(data) {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-}
-
-function buildWordEntry(word, savedAt) {
-  const normalizedKey = Object.keys(defaultWordLibrary).find(
-    (key) => normalizeWord(key) === normalizeWord(word)
-  );
-  const base = defaultWordLibrary[normalizedKey || word] || {
-    phonetic: "",
-    meaning: "",
-    example: "",
-  };
-
-  return {
-    word,
-    savedAt,
-    rightCount: 0,
-    wrongCount: 0,
-    ...base,
-  };
 }
 
 const defaultWordLibrary = {
@@ -334,37 +307,3 @@ const defaultWordLibrary = {
     example: "The atmosphere is warm and inviting.",
   },
 };
-
-function similarityScore(target, heard) {
-  const a = normalizeWord(target);
-  const b = normalizeWord(heard);
-  if (!a || !b) return 20;
-  if (a === b) return 94;
-  if (b.includes(a) || a.includes(b)) return 84;
-  const distance = levenshtein(a, b);
-  const maxLen = Math.max(a.length, b.length, 1);
-  return clamp(Math.round((1 - distance / maxLen) * 100), 20, 90);
-}
-
-function levenshtein(a, b) {
-  const dp = Array.from({ length: a.length + 1 }, () =>
-    new Array(b.length + 1).fill(0)
-  );
-  for (let i = 0; i <= a.length; i += 1) dp[i][0] = i;
-  for (let j = 0; j <= b.length; j += 1) dp[0][j] = j;
-  for (let i = 1; i <= a.length; i += 1) {
-    for (let j = 1; j <= b.length; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + cost
-      );
-    }
-  }
-  return dp[a.length][b.length];
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
