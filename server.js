@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import multer from "multer";
 import OpenAI from "openai";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -14,6 +15,9 @@ const port = Number(process.env.PORT || 4173);
 const textModel = process.env.OPENAI_TEXT_MODEL || "gpt-5-mini";
 const transcribeModel =
   process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
+const dataDir = path.join(__dirname, "data");
+const promptsPath = path.join(dataDir, "prompts.json");
+const dbPath = path.join(dataDir, "db.json");
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -23,6 +27,20 @@ app.use(express.json({ limit: "4mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
+const prompts = JSON.parse(fs.readFileSync(promptsPath, "utf8"));
+
+app.get("/api/bootstrap", (_req, res) => {
+  const db = readDb();
+  const todayPrompt = getPromptForDate(new Date(), prompts);
+  res.json({
+    configured: Boolean(openai),
+    todayPrompt,
+    readingList: db.readingList,
+    speakingList: db.speakingList,
+    history: db.history,
+  });
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
@@ -30,6 +48,78 @@ app.get("/api/health", (_req, res) => {
     textModel,
     transcribeModel,
   });
+});
+
+app.post("/api/words", (req, res) => {
+  const { word, listName, savedAt } = req.body;
+  if (!word || !listName) {
+    return res.status(400).json({ error: "word and listName are required." });
+  }
+
+  const db = readDb();
+  const key = listName === "reading" ? "readingList" : "speakingList";
+  if (!db[key].some((entry) => normalizeWord(entry.word) === normalizeWord(word))) {
+    const base = buildWordEntry(word, savedAt || formatIsoDate(new Date()));
+    db[key].unshift(base);
+    writeDb(db);
+  }
+
+  res.json({ list: db[key] });
+});
+
+app.delete("/api/words/:listName/:word", (req, res) => {
+  const { listName, word } = req.params;
+  const db = readDb();
+  const key = listName === "reading" ? "readingList" : "speakingList";
+  db[key] = db[key].filter(
+    (entry) => normalizeWord(entry.word) !== normalizeWord(decodeURIComponent(word))
+  );
+  writeDb(db);
+  res.json({ list: db[key] });
+});
+
+app.post("/api/review/reading", (req, res) => {
+  const { word, result } = req.body;
+  const db = readDb();
+  const item = db.readingList.find(
+    (entry) => normalizeWord(entry.word) === normalizeWord(word || "")
+  );
+  if (!item) {
+    return res.status(404).json({ error: "Word not found in reading list." });
+  }
+  if (result === "right") item.rightCount += 1;
+  else item.wrongCount += 1;
+  writeDb(db);
+  res.json({ item, list: db.readingList });
+});
+
+app.post("/api/review/speaking", (req, res) => {
+  const { word, matched } = req.body;
+  const db = readDb();
+  const item = db.speakingList.find(
+    (entry) => normalizeWord(entry.word) === normalizeWord(word || "")
+  );
+  if (!item) {
+    return res.status(404).json({ error: "Word not found in speaking list." });
+  }
+  if (matched) item.rightCount += 1;
+  else item.wrongCount += 1;
+  writeDb(db);
+  res.json({ item, list: db.speakingList });
+});
+
+app.post("/api/history", (req, res) => {
+  const { title, summary, image, date } = req.body;
+  const db = readDb();
+  db.history.unshift({
+    id: `hist-${Date.now()}`,
+    title: title || "Practice",
+    summary: summary || "",
+    image: image || getPromptForDate(new Date(), prompts).image,
+    date: date || formatIsoDate(new Date()),
+  });
+  writeDb(db);
+  res.json({ history: db.history });
 });
 
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
@@ -170,6 +260,80 @@ function safeJson(text) {
 function normalizeWord(value) {
   return value.toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
+
+function formatIsoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getPromptForDate(date, allPrompts) {
+  const dayIndex = Math.floor(date.getTime() / 86400000);
+  return allPrompts[dayIndex % allPrompts.length];
+}
+
+function readDb() {
+  return JSON.parse(fs.readFileSync(dbPath, "utf8"));
+}
+
+function writeDb(data) {
+  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+}
+
+function buildWordEntry(word, savedAt) {
+  const normalizedKey = Object.keys(defaultWordLibrary).find(
+    (key) => normalizeWord(key) === normalizeWord(word)
+  );
+  const base = defaultWordLibrary[normalizedKey || word] || {
+    phonetic: "",
+    meaning: "",
+    example: "",
+  };
+
+  return {
+    word,
+    savedAt,
+    rightCount: 0,
+    wrongCount: 0,
+    ...base,
+  };
+}
+
+const defaultWordLibrary = {
+  seller: {
+    phonetic: "/ˈsel.ər/",
+    meaning: "someone whose job is selling products",
+    example: "The seller is standing beside the fruit baskets.",
+  },
+  lively: {
+    phonetic: "/ˈlaɪv.li/",
+    meaning: "full of energy, movement, and excitement",
+    example: "The market looks lively because many people are shopping.",
+  },
+  market: {
+    phonetic: "/ˈmɑːr.kɪt/",
+    meaning: "a place where people buy and sell goods",
+    example: "This market is busy in the morning.",
+  },
+  vendor: {
+    phonetic: "/ˈven.dər/",
+    meaning: "a person selling items, often in a public place",
+    example: "A vendor is arranging fruit on the stand.",
+  },
+  "fresh produce": {
+    phonetic: "/freʃ ˈproʊ.duːs/",
+    meaning: "fresh fruits and vegetables",
+    example: "The stand is full of fresh produce.",
+  },
+  crowded: {
+    phonetic: "/ˈkraʊ.dɪd/",
+    meaning: "full of many people in one place",
+    example: "The street feels crowded but cheerful.",
+  },
+  atmosphere: {
+    phonetic: "/ˈæt.mə.sfɪr/",
+    meaning: "the general feeling or mood of a place",
+    example: "The atmosphere is warm and inviting.",
+  },
+};
 
 function similarityScore(target, heard) {
   const a = normalizeWord(target);

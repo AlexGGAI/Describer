@@ -1,0 +1,117 @@
+{
+  "readingList": [
+    {
+      "word": "vendor",
+      "savedAt": "2026-03-20",
+      "rightCount": 3,
+      "wrongCount": 1,
+      "phonetic": "/ˈven.dər/",
+      "meaning": "a person selling items, often in a public place",
+      "example": "A vendor is arranging fruit on the stand."
+    },
+    {
+      "word": "atmosphere",
+      "savedAt": "2026-03-20",
+      "rightCount": 2,
+      "wrongCount": 2,
+      "phonetic": "/ˈæt.mə.sfɪr/",
+      "meaning": "the general feeling or mood of a place",
+      "example": "The atmosphere is warm and inviting."
+    },
+    {
+      "word": "fresh produce",
+      "savedAt": "2026-03-18",
+      "rightCount": 1,
+      "wrongCount": 2,
+      "phonetic": "/freʃ ˈproʊ.duːs/",
+      "meaning": "fresh fruits and vegetables",
+      "example": "The stand is full of fresh produce."
+    },
+    {
+      "word": "market",
+      "savedAt": "2026-03-17",
+      "rightCount": 4,
+      "wrongCount": 0,
+      "phonetic": "/ˈmɑːr.kɪt/",
+      "meaning": "a place where people buy and sell goods",
+      "example": "This market is busy in the morning."
+    },
+    {
+      "word": "crowded",
+      "savedAt": "2026-03-16",
+      "rightCount": 1,
+      "wrongCount": 3,
+      "phonetic": "/ˈkraʊ.dɪd/",
+      "meaning": "full of many people in one place",
+      "example": "The street feels crowded but cheerful."
+    }
+  ],
+  "speakingList": [
+    {
+      "word": "lively",
+      "savedAt": "2026-03-20",
+      "rightCount": 2,
+      "wrongCount": 3,
+      "phonetic": "/ˈlaɪv.li/",
+      "meaning": "full of energy, movement, and excitement",
+      "example": "The market looks lively because many people are shopping."
+    },
+    {
+      "word": "seller",
+      "savedAt": "2026-03-16",
+      "rightCount": 1,
+      "wrongCount": 4,
+      "phonetic": "/ˈsel.ər/",
+      "meaning": "someone whose job is selling products",
+      "example": "The seller is standing beside the fruit baskets."
+    },
+    {
+      "word": "atmosphere",
+      "savedAt": "2026-03-14",
+      "rightCount": 3,
+      "wrongCount": 1,
+      "phonetic": "/ˈæt.mə.sfɪr/",
+      "meaning": "the general feeling or mood of a place",
+      "example": "The atmosphere is warm and inviting."
+    },
+    {
+      "word": "vendor",
+      "savedAt": "2026-03-12",
+      "rightCount": 2,
+      "wrongCount": 2,
+      "phonetic": "/ˈven.dər/",
+      "meaning": "a person selling items, often in a public place",
+      "example": "A vendor is arranging fruit on the stand."
+    }
+  ],
+  "history": [
+    {
+      "id": "hist-1",
+      "date": "2026-03-18",
+      "title": "Cafe conversation",
+      "summary": "You described relationships, body language, and a relaxed indoor atmosphere.",
+      "image": "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      "id": "hist-2",
+      "date": "2026-03-17",
+      "title": "Beach sunset",
+      "summary": "Practice focused on scenery words, emotions, and fluid spoken descriptions.",
+      "image": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      "id": "hist-3",
+      "date": "2026-03-16",
+      "title": "Library study hour",
+      "summary": "Good correction set for singular/plural grammar and clearer pronunciation.",
+      "image": "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=800&q=80"
+    },
+    {
+      "id": "hist-4",
+      "date": "2026-02-24",
+      "title": "Rainy city walk",
+      "summary": "Focused on weather vocabulary, movement verbs, and clearer speaking.",
+      "image": "https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=800&q=80"
+    }
+  ]
+}

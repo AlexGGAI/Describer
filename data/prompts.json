@@ -1,0 +1,29 @@
+[
+  {
+    "id": "market-street",
+    "title": "Describe this street market.",
+    "image": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+    "alt": "A bright morning market street with fruit stands and people walking",
+    "easy": "This picture shows a busy market in the morning. Many people are walking around and looking at fresh fruit. The sellers seem friendly, and the street feels colorful and lively.",
+    "advanced": "The image captures a vibrant open-air market where shoppers are moving through a lively street lined with fresh produce. The bright colors, relaxed expressions, and natural light create a warm and energetic atmosphere.",
+    "keywords": ["market", "vendor", "fresh produce", "crowded", "lively", "atmosphere"]
+  },
+  {
+    "id": "cafe-window",
+    "title": "Describe this cafe scene.",
+    "image": "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
+    "alt": "A cozy cafe with people talking by the window",
+    "easy": "This picture shows a small cafe with a warm atmosphere. Some people are talking, and the place looks quiet and comfortable.",
+    "advanced": "The scene presents an intimate cafe interior where relaxed conversation, warm lighting, and soft window light create a calm and welcoming atmosphere.",
+    "keywords": ["cafe", "conversation", "comfortable", "window light", "relaxed", "atmosphere"]
+  },
+  {
+    "id": "rainy-city",
+    "title": "Describe this rainy city walk.",
+    "image": "https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=1200&q=80",
+    "alt": "A rainy city street with umbrellas and reflections",
+    "easy": "This picture shows a rainy city street. People are walking with umbrellas, and the road looks shiny because of the rain.",
+    "advanced": "The image captures an urban street on a rainy day, where umbrellas, reflections, and passing movement create a moody yet lively city atmosphere.",
+    "keywords": ["rainy", "umbrella", "reflection", "street", "urban", "atmosphere"]
+  }
+]

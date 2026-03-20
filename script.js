@@ -146,18 +146,7 @@ function createDefaultState() {
   };
 }
 
-function loadState() {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) return createDefaultState();
-  try {
-    const parsed = JSON.parse(stored);
-    return { ...createDefaultState(), ...parsed };
-  } catch {
-    return createDefaultState();
-  }
-}
-
-let state = loadState();
+let state = createDefaultState();
 let selectedWord = null;
 let selectedWordElement = null;
 let currentMonth = "all";
@@ -261,7 +250,7 @@ const elements = {
 };
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  return state;
 }
 
 async function checkApiHealth() {
@@ -269,6 +258,21 @@ async function checkApiHealth() {
     const response = await fetch("/api/health");
     const data = await response.json();
     apiConfigured = Boolean(data.configured);
+  } catch {
+    apiConfigured = false;
+  }
+}
+
+async function loadBootstrap() {
+  try {
+    const response = await fetch("/api/bootstrap");
+    if (!response.ok) return;
+    const data = await response.json();
+    apiConfigured = Boolean(data.configured);
+    if (data.todayPrompt) Object.assign(todayPrompt, data.todayPrompt);
+    if (Array.isArray(data.readingList)) state.readingList = data.readingList;
+    if (Array.isArray(data.speakingList)) state.speakingList = data.speakingList;
+    if (Array.isArray(data.history)) state.history = data.history;
   } catch {
     apiConfigured = false;
   }
@@ -365,20 +369,46 @@ function speakWord(word) {
   synth.speak(utterance);
 }
 
-function saveWordToList(word, listName) {
+async function saveWordToList(word, listName) {
   const listKey = listName === "reading" ? "readingList" : "speakingList";
-  const existing = state[listKey].find((item) => item.word === word);
-  if (!existing) {
-    state[listKey].unshift(createWord(word, todayPrompt.date));
+  try {
+    const response = await fetch("/api/words", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word, listName, savedAt: todayPrompt.date }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      state[listKey] = data.list;
+    } else if (!state[listKey].some((item) => item.word === word)) {
+      state[listKey].unshift(createWord(word, todayPrompt.date));
+    }
+  } catch {
+    if (!state[listKey].some((item) => item.word === word)) {
+      state[listKey].unshift(createWord(word, todayPrompt.date));
+    }
   }
   saveState();
   renderAll();
   showToast(`Saved "${word}" to ${listName === "reading" ? "Reading" : "Speaking"}`);
 }
 
-function removeWordFromList(word, listName) {
+async function removeWordFromList(word, listName) {
   const listKey = listName === "reading" ? "readingList" : "speakingList";
-  state[listKey] = state[listKey].filter((item) => item.word !== word);
+  try {
+    const response = await fetch(
+      `/api/words/${listName}/${encodeURIComponent(word)}`,
+      { method: "DELETE" }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      state[listKey] = data.list;
+    } else {
+      state[listKey] = state[listKey].filter((item) => item.word !== word);
+    }
+  } catch {
+    state[listKey] = state[listKey].filter((item) => item.word !== word);
+  }
   saveState();
   renderAll();
 }
@@ -587,11 +617,24 @@ function renderReadingReview() {
   elements.readingReviewMeaningPanel.classList.add("is-hidden");
 }
 
-function commitReadingPending() {
+async function commitReadingPending() {
   const item = getReadingReviewWord();
   if (!item || !state.review.readingPending) return;
-  if (state.review.readingPending === "right") item.rightCount += 1;
-  else item.wrongCount += 1;
+  try {
+    const response = await fetch("/api/review/reading", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word: item.word, result: state.review.readingPending }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      state.readingList = data.list;
+    } else if (state.review.readingPending === "right") item.rightCount += 1;
+    else item.wrongCount += 1;
+  } catch {
+    if (state.review.readingPending === "right") item.rightCount += 1;
+    else item.wrongCount += 1;
+  }
   state.review.readingPending = null;
   saveState();
 }
@@ -779,8 +822,21 @@ async function judgeSpeakingWord(word) {
       if (!response.ok) throw new Error("AI judge request failed.");
       const result = await response.json();
       state.review.speakingAttempt = result.heard || state.review.speakingAttempt;
-      if (result.matched) item.rightCount += 1;
-      else item.wrongCount += 1;
+      try {
+        const reviewResponse = await fetch("/api/review/speaking", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ word, matched: result.matched }),
+        });
+        if (reviewResponse.ok) {
+          const reviewData = await reviewResponse.json();
+          state.speakingList = reviewData.list;
+        } else if (result.matched) item.rightCount += 1;
+        else item.wrongCount += 1;
+      } catch {
+        if (result.matched) item.rightCount += 1;
+        else item.wrongCount += 1;
+      }
       saveState();
       renderWordList("speaking");
       renderSpeakingReview();
@@ -796,8 +852,21 @@ async function judgeSpeakingWord(word) {
   const attempt = normalized(state.review.speakingAttempt || "");
   const target = normalized(word);
   const correct = attempt === target || attempt.includes(target);
-  if (correct) item.rightCount += 1;
-  else item.wrongCount += 1;
+  try {
+    const reviewResponse = await fetch("/api/review/speaking", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word, matched: correct }),
+    });
+    if (reviewResponse.ok) {
+      const reviewData = await reviewResponse.json();
+      state.speakingList = reviewData.list;
+    } else if (correct) item.rightCount += 1;
+    else item.wrongCount += 1;
+  } catch {
+    if (correct) item.rightCount += 1;
+    else item.wrongCount += 1;
+  }
   saveState();
   renderWordList("speaking");
   renderSpeakingReview();
@@ -896,10 +965,10 @@ document.addEventListener("click", (event) => {
   }
 });
 
-document.addEventListener("keydown", (event) => {
+document.addEventListener("keydown", async (event) => {
   const key = event.key.toLowerCase();
-  if (key === "r" && selectedWord) saveWordToList(selectedWord, "reading");
-  if (key === "s" && selectedWord) saveWordToList(selectedWord, "speaking");
+  if (key === "r" && selectedWord) await saveWordToList(selectedWord, "reading");
+  if (key === "s" && selectedWord) await saveWordToList(selectedWord, "speaking");
 });
 
 elements.recordButton.addEventListener("click", () => captureAudio("today"));
@@ -923,13 +992,38 @@ elements.submitButton.addEventListener("click", async () => {
     showToast("AI analyze failed. Using local fallback.");
   }
 
-  state.history.unshift({
-    id: `hist-${Date.now()}`,
-    date: todayPrompt.date,
-    title: "Street market practice",
-    summary: state.feedback.correctedTranscript,
-    image: todayPrompt.image,
-  });
+  try {
+    const historyResponse = await fetch("/api/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: todayPrompt.date,
+        title: "Street market practice",
+        summary: state.feedback.correctedTranscript,
+        image: todayPrompt.image,
+      }),
+    });
+    if (historyResponse.ok) {
+      const historyData = await historyResponse.json();
+      state.history = historyData.history;
+    } else {
+      state.history.unshift({
+        id: `hist-${Date.now()}`,
+        date: todayPrompt.date,
+        title: "Street market practice",
+        summary: state.feedback.correctedTranscript,
+        image: todayPrompt.image,
+      });
+    }
+  } catch {
+    state.history.unshift({
+      id: `hist-${Date.now()}`,
+      date: todayPrompt.date,
+      title: "Street market practice",
+      summary: state.feedback.correctedTranscript,
+      image: todayPrompt.image,
+    });
+  }
   dailyAudioBlob = null;
   saveState();
   renderAll();
@@ -1030,8 +1124,8 @@ elements.readingReviewPrev.addEventListener("click", () => {
   if (state.review.readingIndex > 0) state.review.readingIndex -= 1;
   renderReadingReview();
 });
-elements.readingReviewNext.addEventListener("click", () => {
-  commitReadingPending();
+elements.readingReviewNext.addEventListener("click", async () => {
+  await commitReadingPending();
   if (state.review.readingIndex < state.review.readingQueue.length - 1) state.review.readingIndex += 1;
   renderReadingReview();
 });
@@ -1073,4 +1167,4 @@ elements.addSpeaking.addEventListener("click", () => {
   if (elements.drawer.dataset.word) saveWordToList(elements.drawer.dataset.word, "speaking");
 });
 
-checkApiHealth().finally(renderAll);
+Promise.all([checkApiHealth(), loadBootstrap()]).finally(renderAll);
