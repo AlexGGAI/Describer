@@ -7,14 +7,15 @@
     "dev": "node server.js",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:system": "node scripts/system-test.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "better-sqlite3": "^12.2.0",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
-    "multer": "^2.0.2",
-    "openai": "^5.20.0"
+    "multer": "^2.0.2"
   },
   "devDependencies": {
     "vite": "^7.1.7"

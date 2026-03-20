@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import multer from "multer";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
@@ -18,12 +18,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 const port = Number(process.env.PORT || 4173);
-const textModel = process.env.OPENAI_TEXT_MODEL || "gpt-5-mini";
-const transcribeModel =
-  process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
+const textModel =
+  process.env.ANTHROPIC_TEXT_MODEL || "claude-sonnet-4-20250514";
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null;
 
 app.use(express.json({ limit: "4mb" }));
@@ -32,7 +31,7 @@ app.use(express.static(__dirname));
 
 app.get("/api/bootstrap", (_req, res) => {
   res.json({
-    configured: Boolean(openai),
+    configured: Boolean(anthropic),
     ...getBootstrap(formatIsoDate(new Date())),
   });
 });
@@ -40,23 +39,25 @@ app.get("/api/bootstrap", (_req, res) => {
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
-    configured: Boolean(openai),
+    configured: Boolean(anthropic),
+    provider: "anthropic",
     textModel,
-    transcribeModel,
+    transcription: "browser-only",
   });
 });
 
-app.post("/api/words", (req, res) => {
+app.post("/api/words", async (req, res) => {
   const { word, listName, savedAt } = req.body;
   if (!word || !listName) {
     return res.status(400).json({ error: "word and listName are required." });
   }
 
+  const details = await lookupWordDetails(word);
   const list = addWord({
     listName,
     word,
     savedAt: savedAt || formatIsoDate(new Date()),
-    ...defaultWordLibrary[word],
+    ...details,
   });
 
   res.json({ list });
@@ -93,49 +94,63 @@ app.post("/api/history", (req, res) => {
   res.json({ history });
 });
 
-app.post("/api/analyze", upload.single("audio"), async (req, res) => {
+app.post("/api/analyze", upload.none(), async (req, res) => {
   try {
-    if (!openai) {
+    if (!anthropic) {
       return res.status(503).json({
-        error: "OpenAI API key is not configured on the server.",
+        error: "Anthropic API key is not configured on the server.",
       });
     }
 
     const promptTitle = req.body.promptTitle || "Describe the picture.";
-    let transcript = (req.body.transcript || "").trim();
-
-    if (req.file?.buffer?.length) {
-      const file = new File([req.file.buffer], req.file.originalname || "recording.webm", {
-        type: req.file.mimetype || "audio/webm",
-      });
-      const transcription = await openai.audio.transcriptions.create({
-        file,
-        model: transcribeModel,
-      });
-      transcript = (transcription.text || "").trim();
-    }
+    const transcript = (req.body.transcript || "").trim();
+    const imageUrl = req.body.imageUrl || "";
 
     if (!transcript) {
-      return res.status(400).json({ error: "No transcript or audio was provided." });
+      return res.status(400).json({
+        error: "No transcript was provided. Claude mode needs browser transcript input.",
+      });
     }
 
-    const response = await openai.responses.create({
+    const response = await anthropic.messages.create({
       model: textModel,
-      instructions:
-        "You are an English speaking coach. Return only valid JSON with keys grammarOriginal, grammarCorrected, grammarNote, correctedTranscript, pronunciationWords, easy, advanced, keywords. pronunciationWords and keywords must be arrays of strings. Keep explanations simple and concise. For pronunciationWords, infer likely hard words from the learner's spoken output and useful speaking targets, not certainty from acoustics.",
-      input: `Picture prompt: ${promptTitle}\nLearner transcript: ${transcript}`,
+      max_tokens: 900,
+      system:
+        "You are an English speaking coach for learners. Respond with compact valid JSON only.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                `Picture prompt: ${promptTitle}\n` +
+                `Picture image URL for context: ${imageUrl || "not provided"}\n` +
+                `Learner transcript: ${transcript}\n\n` +
+                `Return only valid JSON with keys grammarOriginal, grammarCorrected, grammarNote, correctedTranscript, pronunciationWords, easy, advanced, keywords.\n` +
+                `pronunciationWords and keywords must be arrays of strings.\n` +
+                `Keep explanations short and simple.\n` +
+                `For pronunciationWords, infer likely hard words from the learner transcript and the picture context.`,
+            },
+          ],
+        },
+      ],
     });
 
-    const parsed = safeJson(response.output_text);
+    const text = response.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+
+    const parsed = safeJson(text);
 
     res.json({
       transcript,
       feedback: {
-        grammarOriginal:
-          parsed.grammarOriginal || `Original: "${transcript}"`,
-        grammarCorrected:
-          parsed.grammarCorrected || `Correct: "${transcript}"`,
-        grammarNote: parsed.grammarNote || "Try smoother grammar and more natural phrasing.",
+        grammarOriginal: parsed.grammarOriginal || `Original: "${transcript}"`,
+        grammarCorrected: parsed.grammarCorrected || `Correct: "${transcript}"`,
+        grammarNote:
+          parsed.grammarNote || "Try smoother grammar and more natural phrasing.",
         correctedTranscript: parsed.correctedTranscript || transcript,
         pronunciationWords: Array.isArray(parsed.pronunciationWords)
           ? parsed.pronunciationWords.slice(0, 4)
@@ -147,52 +162,72 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
     });
   } catch (error) {
     console.error("/api/analyze failed", error);
-    res.status(500).json({ error: "Failed to analyze speech." });
+    res.status(500).json({ error: "Failed to analyze speech with Claude." });
   }
 });
 
-app.post("/api/judge-word", upload.single("audio"), async (req, res) => {
+app.post("/api/judge-word", upload.none(), async (req, res) => {
   try {
-    if (!openai) {
+    if (!anthropic) {
       return res.status(503).json({
-        error: "OpenAI API key is not configured on the server.",
+        error: "Anthropic API key is not configured on the server.",
       });
     }
 
     const targetWord = (req.body.targetWord || "").trim();
-    let heard = (req.body.attempt || "").trim();
+    const heard = (req.body.attempt || "").trim();
 
     if (!targetWord) {
       return res.status(400).json({ error: "targetWord is required." });
     }
 
-    if (req.file?.buffer?.length) {
-      const file = new File([req.file.buffer], req.file.originalname || "word.webm", {
-        type: req.file.mimetype || "audio/webm",
+    if (!heard) {
+      return res.status(400).json({
+        error: "No spoken transcript was provided. Claude mode needs browser speech recognition first.",
       });
-      const transcription = await openai.audio.transcriptions.create({
-        file,
-        model: transcribeModel,
-      });
-      heard = (transcription.text || "").trim();
     }
 
-    const score = similarityScore(targetWord, heard);
-    const response = await openai.responses.create({
+    const baseline = similarityScore(targetWord, heard);
+    const response = await anthropic.messages.create({
       model: textModel,
-      instructions:
-        "You are an English pronunciation coach. Return only valid JSON with keys score and feedback. score must be an integer 0-100. feedback must be one short sentence. Base your judgment on the target word and the transcribed heard word, and be honest that this is an approximate speaking check.",
-      input: `Target word: ${targetWord}\nTranscribed spoken attempt: ${heard || "(empty)"}\nSuggested baseline score: ${score}`,
+      max_tokens: 250,
+      system:
+        "You are an English pronunciation coach. Respond with compact valid JSON only.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                `Target word: ${targetWord}\n` +
+                `Browser transcript of spoken attempt: ${heard}\n` +
+                `Baseline similarity score: ${baseline}\n\n` +
+                `Return only valid JSON with keys score and feedback.\n` +
+                `score must be an integer 0-100.\n` +
+                `feedback must be one short sentence.\n` +
+                `Judge carefully but acknowledge this is approximate because the input is transcript-based.`,
+            },
+          ],
+        },
+      ],
     });
 
-    const parsed = safeJson(response.output_text);
+    const text = response.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+
+    const parsed = safeJson(text);
+    const score =
+      typeof parsed.score === "number"
+        ? clamp(Math.round(parsed.score), 0, 100)
+        : baseline;
+
     res.json({
       targetWord,
       heard,
-      score:
-        typeof parsed.score === "number"
-          ? clamp(Math.round(parsed.score), 0, 100)
-          : score,
+      score,
       feedback:
         parsed.feedback ||
         (score >= 85
@@ -202,7 +237,7 @@ app.post("/api/judge-word", upload.single("audio"), async (req, res) => {
     });
   } catch (error) {
     console.error("/api/judge-word failed", error);
-    res.status(500).json({ error: "Failed to judge pronunciation." });
+    res.status(500).json({ error: "Failed to judge pronunciation with Claude." });
   }
 });
 
@@ -268,6 +303,74 @@ function clamp(value, min, max) {
 
 function formatIsoDate(date) {
   return date.toISOString().slice(0, 10);
+}
+
+async function lookupWordDetails(word) {
+  const normalizedWord = String(word || "").trim().toLowerCase();
+  if (!normalizedWord) {
+    return emptyWordDetails(word);
+  }
+
+  if (defaultWordLibrary[normalizedWord]) {
+    return defaultWordLibrary[normalizedWord];
+  }
+
+  if (!anthropic) {
+    return emptyWordDetails(word);
+  }
+
+  try {
+    const response = await anthropic.messages.create({
+      model: textModel,
+      max_tokens: 220,
+      system:
+        "You are a concise English vocabulary coach. Respond with compact valid JSON only.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                `Word or phrase: ${word}\n\n` +
+                "Return only valid JSON with keys phonetic, meaning, example.\n" +
+                "meaning should be short and easy.\n" +
+                "example should be one natural sentence for English learners.",
+            },
+          ],
+        },
+      ],
+    });
+
+    const text = response.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+    const parsed = safeJson(text);
+
+    return {
+      phonetic: typeof parsed.phonetic === "string" ? parsed.phonetic : "",
+      meaning:
+        typeof parsed.meaning === "string" && parsed.meaning.trim()
+          ? parsed.meaning.trim()
+          : `Useful word related to "${word}".`,
+      example:
+        typeof parsed.example === "string" && parsed.example.trim()
+          ? parsed.example.trim()
+          : `I can use "${word}" when I describe a picture.`,
+    };
+  } catch (error) {
+    console.error("lookupWordDetails failed", error);
+    return emptyWordDetails(word);
+  }
+}
+
+function emptyWordDetails(word) {
+  return {
+    phonetic: "",
+    meaning: `Useful word related to "${word}".`,
+    example: `I can use "${word}" when I describe a picture.`,
+  };
 }
 
 const defaultWordLibrary = {

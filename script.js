@@ -106,12 +106,13 @@ const seedHistory = [
 ];
 
 function createWord(word, savedAt, rightCount = 0, wrongCount = 0) {
+  const details = lookupWordEntry(word);
   return {
     word,
     savedAt,
     rightCount,
     wrongCount,
-    ...wordLibrary[word],
+    ...details,
   };
 }
 
@@ -162,6 +163,7 @@ let mediaRecorder = null;
 let recordingMode = null;
 let dailyAudioBlob = null;
 let speakingAudioBlob = null;
+let micPermissionGranted = false;
 
 const elements = {
   views: {
@@ -177,6 +179,8 @@ const elements = {
   micStatus: document.getElementById("mic-status"),
   recordButton: document.getElementById("record-button"),
   transcriptText: document.getElementById("transcript-text"),
+  testMicButton: document.getElementById("test-mic-button"),
+  micTestResult: document.getElementById("mic-test-result"),
   retryButton: document.getElementById("retry-button"),
   submitButton: document.getElementById("submit-button"),
   grammarOriginal: document.getElementById("grammar-original"),
@@ -354,6 +358,20 @@ function showToast(message) {
   setTimeout(() => elements.shortcutToast.classList.remove("is-visible"), 1200);
 }
 
+function lookupWordEntry(word) {
+  const key = String(word || "").trim().toLowerCase();
+  const existing = wordLibrary[key];
+  if (existing) return existing;
+
+  const fallback = {
+    phonetic: "",
+    meaning: `Useful word related to "${word}".`,
+    example: `I can use "${word}" when I describe a picture.`,
+  };
+  wordLibrary[key] = fallback;
+  return fallback;
+}
+
 function setSelectedWord(word, element) {
   if (selectedWordElement) selectedWordElement.classList.remove("is-selected");
   selectedWord = word;
@@ -431,11 +449,26 @@ function renderToday() {
   elements.dailyPromptTitle.textContent = todayPrompt.title;
   elements.transcriptText.textContent =
     state.transcript || "Tap Speak to start describing the picture.";
-  elements.micStatus.textContent = apiConfigured
-    ? dailyAudioBlob
+  elements.micStatus.textContent = dailyAudioBlob
+    ? apiConfigured
       ? "Recording ready"
-      : "Ready to record"
-    : "Browser demo mode";
+      : "Mic ready, AI off"
+    : micPermissionGranted
+      ? apiConfigured
+        ? "Ready to record"
+        : "Mic on, local only"
+      : apiConfigured
+        ? "Ready to record"
+        : "Need mic access";
+  elements.micTestResult.textContent = micPermissionGranted
+    ? SpeechRecognitionApi
+      ? apiConfigured
+        ? "Mic OK. Speech recognition available. AI available."
+        : "Mic OK. Speech recognition available. AI not configured."
+      : apiConfigured
+        ? "Mic OK. Recording available. Speech recognition unsupported."
+        : "Mic OK. Recording available. Speech recognition unsupported. AI not configured."
+    : "Mic not tested yet.";
   elements.grammarOriginal.textContent = state.feedback.grammarOriginal;
   elements.grammarCorrected.innerHTML = state.feedback.grammarCorrected.replace(
     /Correct:/,
@@ -458,6 +491,10 @@ function renderToday() {
         `<button class="word-chip" data-word-value="${word}" data-word-select="${word}">${word}</button>`
     )
     .join("");
+
+  [...state.feedback.pronunciationWords, ...state.feedback.keywords].forEach((word) =>
+    lookupWordEntry(word)
+  );
 
   const recent = [
     ...state.readingList.slice(0, 2).map((item) => ({ ...item, tag: "Reading" })),
@@ -672,17 +709,12 @@ function renderAll() {
 function startRecognition(mode) {
   if (!SpeechRecognitionApi) {
     if (mode === "today") {
-      state.transcript =
-        "I think this picture shows a busy market. Many people are walking around, and the street feels lively.";
-      elements.micStatus.textContent = "Demo transcript ready";
-      saveState();
-      renderToday();
+      elements.micStatus.textContent = "Mic works, speech recognition unsupported";
     } else {
-      const target = getSpeakingReviewWord();
-      state.review.speakingAttempt = target.word;
-      elements.speakingResult.textContent = `Latest attempt: "${target.word}". Press Let AI Judge to check it.`;
+      elements.speakingResult.textContent =
+        "Microphone works, but this browser does not support speech recognition.";
     }
-    showToast("Speech recognition is not available here. Demo text was used.");
+    showToast("Dia may allow the mic, but browser speech recognition is not available here.");
     return;
   }
 
@@ -704,6 +736,7 @@ function startRecognition(mode) {
   };
 
   recognition.onresult = (event) => {
+    micPermissionGranted = true;
     const transcript = event.results[0][0].transcript;
     if (mode === "today") {
       state.transcript = transcript;
@@ -716,7 +749,7 @@ function startRecognition(mode) {
   };
 
   recognition.onerror = () => {
-    showToast("Microphone permission or speech recognition failed.");
+    showToast("Speech recognition failed in this browser.");
   };
 
   recognition.onend = () => {
@@ -729,11 +762,7 @@ function startRecognition(mode) {
 }
 
 async function captureAudio(mode) {
-  if (
-    !apiConfigured ||
-    !navigator.mediaDevices?.getUserMedia ||
-    typeof MediaRecorder === "undefined"
-  ) {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
     startRecognition(mode);
     return;
   }
@@ -746,8 +775,14 @@ async function captureAudio(mode) {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micPermissionGranted = true;
   } catch {
     showToast("Microphone permission was denied.");
+    if (mode === "today") {
+      elements.micStatus.textContent = "Microphone blocked";
+    } else {
+      elements.speakingResult.textContent = "Microphone blocked.";
+    }
     return;
   }
   const chunks = [];
@@ -771,11 +806,23 @@ async function captureAudio(mode) {
     const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
     if (mode === "today") {
       dailyAudioBlob = blob;
-      elements.micStatus.textContent = "Recording ready";
+      elements.micStatus.textContent = apiConfigured
+        ? "Recording ready"
+        : "Mic recorded, AI off";
+      if (!apiConfigured && SpeechRecognitionApi) {
+        startRecognition("today");
+      } else if (!apiConfigured) {
+        showToast("Mic is working. Add API key or use a browser with speech recognition for transcript.");
+      }
     } else {
       speakingAudioBlob = blob;
-      elements.speakingResult.textContent = "Recording ready. Press Let AI Judge.";
+      elements.speakingResult.textContent = apiConfigured
+        ? "Recording ready. Press Let AI Judge."
+        : "Recording ready, but AI is not configured.";
       elements.startSpeakingReview.textContent = "Record Again";
+      if (!apiConfigured && SpeechRecognitionApi) {
+        startRecognition("speaking-review");
+      }
     }
 
     stream.getTracks().forEach((track) => track.stop());
@@ -786,12 +833,45 @@ async function captureAudio(mode) {
   mediaRecorder.start();
 }
 
+async function testMicrophone() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    micPermissionGranted = false;
+    elements.micStatus.textContent = "Browser unsupported";
+    elements.micTestResult.textContent =
+      "This browser does not support microphone capture.";
+    showToast("Mic test failed.");
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micPermissionGranted = true;
+    stream.getTracks().forEach((track) => track.stop());
+    elements.micStatus.textContent = apiConfigured ? "Ready to record" : "Mic on, local only";
+    elements.micTestResult.textContent = SpeechRecognitionApi
+      ? apiConfigured
+        ? "Mic permission granted. Speech recognition available. AI available."
+        : "Mic permission granted. Speech recognition available. AI not configured."
+      : apiConfigured
+        ? "Mic permission granted. Recording works. Speech recognition unsupported."
+        : "Mic permission granted. Recording works. Speech recognition unsupported. AI not configured.";
+    showToast("Mic test passed.");
+  } catch {
+    micPermissionGranted = false;
+    elements.micStatus.textContent = "Microphone blocked";
+    elements.micTestResult.textContent =
+      "Microphone is blocked in browser or system settings.";
+    showToast("Mic test failed.");
+  }
+}
+
 async function analyzeWithBackend() {
   if (!apiConfigured) return null;
   const formData = new FormData();
   formData.append("promptTitle", todayPrompt.title);
   formData.append("transcript", state.transcript || "");
-  if (dailyAudioBlob) formData.append("audio", dailyAudioBlob, "today.webm");
+  formData.append("imageUrl", todayPrompt.image || "");
 
   const response = await fetch("/api/analyze", {
     method: "POST",
@@ -809,12 +889,17 @@ async function judgeSpeakingWord(word) {
   const item = state.speakingList.find((entry) => entry.word === word);
   if (!item) return;
 
+  if (!state.review.speakingAttempt.trim()) {
+    elements.speakingResult.textContent = "Say the word first, then let AI judge it.";
+    showToast("Please say the word first.");
+    return;
+  }
+
   if (apiConfigured) {
     try {
       const formData = new FormData();
       formData.append("targetWord", word);
       formData.append("attempt", state.review.speakingAttempt || "");
-      if (speakingAudioBlob) formData.append("audio", speakingAudioBlob, "word.webm");
       const response = await fetch("/api/judge-word", {
         method: "POST",
         body: formData,
@@ -919,7 +1004,7 @@ document.addEventListener("click", (event) => {
   if (wordButton) {
     const word = wordButton.dataset.wordSelect;
     setSelectedWord(word, wordButton);
-    const entry = wordLibrary[word];
+    const entry = lookupWordEntry(word);
     if (entry) {
       elements.drawerWord.textContent = word;
       elements.drawerPhonetic.textContent = entry.phonetic;
@@ -959,8 +1044,18 @@ document.addEventListener("click", (event) => {
   if (judgeButton) {
     const word = judgeButton.dataset.judgeWord;
     state.review.speakingIndex = state.speakingList.findIndex((item) => item.word === word);
-    state.review.speakingAttempt = word;
-    judgeSpeakingWord(word);
+    state.review.speakingAttempt = "";
+    document.querySelectorAll(".nav-link").forEach((item) => item.classList.remove("is-active"));
+    Object.values(elements.views).forEach((view) => view.classList.remove("is-visible"));
+    document.querySelector('.nav-link[data-view="settings"]').classList.add("is-active");
+    elements.views.settings.classList.add("is-visible");
+    document.querySelectorAll("[data-review-tab]").forEach((item) => {
+      item.classList.toggle("is-active", item.dataset.reviewTab === "speaking");
+    });
+    document.querySelectorAll(".review-tab").forEach((tab) => tab.classList.remove("is-visible"));
+    document.getElementById("review-tab-speaking").classList.add("is-visible");
+    renderSpeakingReview();
+    showToast(`Ready to judge "${word}" in Review`);
     return;
   }
 });
@@ -972,13 +1067,25 @@ document.addEventListener("keydown", async (event) => {
 });
 
 elements.recordButton.addEventListener("click", () => captureAudio("today"));
+elements.testMicButton.addEventListener("click", () => testMicrophone());
 elements.retryButton.addEventListener("click", () => {
   state.transcript = "";
+  dailyAudioBlob = null;
   state.feedback = analyzeTranscript("");
   saveState();
   renderToday();
 });
 elements.submitButton.addEventListener("click", async () => {
+  if (!state.transcript.trim()) {
+    showToast("Please speak first so Claude has a transcript to analyze.");
+    return;
+  }
+
+  if (!apiConfigured && dailyAudioBlob && !state.transcript) {
+    showToast("Mic works, but Claude needs browser transcript text first.");
+    return;
+  }
+
   try {
     const result = await analyzeWithBackend();
     if (result) {
@@ -989,7 +1096,11 @@ elements.submitButton.addEventListener("click", async () => {
     }
   } catch {
     state.feedback = analyzeTranscript(state.transcript);
-    showToast("AI analyze failed. Using local fallback.");
+    showToast("AI is not configured or unavailable. Using local fallback.");
+  }
+
+  if (!state.transcript && dailyAudioBlob && !apiConfigured) {
+    showToast("Recording exists, but Claude mode still needs browser transcript text.");
   }
 
   try {
@@ -1138,6 +1249,10 @@ elements.startSpeakingReview.addEventListener("click", () => captureAudio("speak
 elements.runAiJudge.addEventListener("click", async () => {
   const item = getSpeakingReviewWord();
   if (!item) return;
+  if (!apiConfigured && speakingAudioBlob && !state.review.speakingAttempt) {
+    showToast("Mic works, but Claude speaking judge needs browser transcript text first.");
+    return;
+  }
   await judgeSpeakingWord(item.word);
 });
 elements.speakingReviewPrev.addEventListener("click", () => {
