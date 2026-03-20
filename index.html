@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Describer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">D</div>
+          <div>
+            <p class="eyebrow">Speaking Studio</p>
+            <h1>Describer</h1>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-link is-active" data-view="today">Today</button>
+          <button class="nav-link" data-view="history">History</button>
+          <button class="nav-link" data-view="vocabulary">Reading List</button>
+          <button class="nav-link" data-view="speaking">Speaking List</button>
+          <button class="nav-link" data-view="settings">Review</button>
+        </nav>
+
+        <section class="sidebar-card">
+          <p class="eyebrow">Daily Goal</p>
+          <div class="goal-row">
+            <strong>7 day streak</strong>
+            <span>4/5 prompts this week</span>
+          </div>
+          <div class="goal-progress" aria-hidden="true">
+            <span></span>
+          </div>
+        </section>
+
+        <section class="sidebar-card shortcut-card">
+          <p class="eyebrow">Shortcut</p>
+          <p>
+            Press <kbd>S</kbd> to add the selected feedback word into the speaking
+            list faster.
+          </p>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">March 19</p>
+            <h2>Daily Practice</h2>
+          </div>
+          <div class="topbar-actions">
+            <button class="ghost-button">Streak</button>
+            <button class="primary-button">Speak</button>
+          </div>
+        </header>
+
+        <section class="view is-visible" id="view-today">
+          <div class="hero-grid">
+            <article class="picture-card panel">
+              <div class="picture-meta">
+                <span class="badge">Today</span>
+                <span class="muted">2 min</span>
+              </div>
+              <img
+                src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80"
+                alt="A bright morning market street with fruit stands and people walking"
+              />
+              <div class="picture-caption">
+                <h3>Describe this street market.</h3>
+              </div>
+            </article>
+
+            <article class="practice-card panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Speak</p>
+                  <h3>Your voice</h3>
+                </div>
+                <span class="status-pill">Microphone ready</span>
+              </div>
+
+              <button class="record-button" type="button">
+                <span class="record-core"></span>
+              </button>
+
+              <div class="waveform" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span
+                ><span></span><span></span><span></span>
+              </div>
+
+              <div class="transcript-box">
+                <p class="eyebrow">Transcript</p>
+                <p>
+                  I think this picture show a busy market. Many people is walking
+                  and some seller are smiling. The fruits look very fresh and the
+                  street feels lively.
+                </p>
+              </div>
+
+              <div class="action-row">
+                <button class="ghost-button">Try Again</button>
+                <button class="primary-button">Submit to AI</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="feedback-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Feedback</p>
+                  <h3>Grammar + sound</h3>
+                </div>
+              </div>
+
+              <div class="feedback-block">
+                <div class="feedback-label">Grammar fix</div>
+                <p class="feedback-original">
+                  “this picture <span class="mistake grammar">show</span> a busy
+                  market”
+                </p>
+                <p class="feedback-corrected">
+                  Correct: “this picture <strong>shows</strong> a busy market”
+                </p>
+                <p class="feedback-note">
+                  Use <strong>shows</strong> because the subject is singular.
+                </p>
+              </div>
+
+              <div class="feedback-block">
+                <div class="feedback-label">Pronunciation fix</div>
+                <p class="feedback-original">
+                  Flagged words:
+                  <button class="word-chip issue" data-word="seller">
+                    seller
+                  </button>
+                  <button class="word-chip issue" data-word="lively">
+                    lively
+                  </button>
+                </p>
+                <p class="feedback-note">Tap a red word to hear it and save it.</p>
+              </div>
+            </article>
+
+            <article class="panel model-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Models</p>
+                  <h3>Two versions</h3>
+                </div>
+                <div class="toggle-row">
+                  <button class="toggle-button is-active" data-model="easy">
+                    Easy
+                  </button>
+                  <button class="toggle-button" data-model="advanced">
+                    Advanced
+                  </button>
+                </div>
+              </div>
+
+              <div class="model-copy is-visible" id="model-easy">
+                <p>
+                  This picture shows a busy market in the morning. Many people
+                  are walking around and looking at fresh fruit. The sellers seem
+                  friendly, and the street feels colorful and lively.
+                </p>
+              </div>
+
+              <div class="model-copy" id="model-advanced">
+                <p>
+                  The image captures a vibrant open-air market where shoppers are
+                  moving through a lively street lined with fresh produce. The
+                  bright colors, relaxed expressions, and natural light create a
+                  warm and energetic atmosphere.
+                </p>
+              </div>
+            </article>
+          </div>
+
+          <div class="lower-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Words</p>
+                  <h3>Key words</h3>
+                </div>
+              </div>
+
+              <div class="chip-grid">
+                <button class="word-chip" data-word="market">market</button>
+                <button class="word-chip" data-word="vendor">vendor</button>
+                <button class="word-chip" data-word="fresh produce">
+                  fresh produce
+                </button>
+                <button class="word-chip" data-word="crowded">crowded</button>
+                <button class="word-chip" data-word="lively">lively</button>
+                <button class="word-chip" data-word="atmosphere">
+                  atmosphere
+                </button>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Recent</p>
+                  <h3>Saved words</h3>
+                </div>
+              </div>
+
+              <div class="mini-list">
+                <div class="mini-row">
+                  <div>
+                    <strong>vendor</strong>
+                    <span>/ˈven.dər/</span>
+                  </div>
+                  <span class="tag">Vocabulary</span>
+                </div>
+                <div class="mini-row">
+                  <div>
+                    <strong>lively</strong>
+                    <span>/ˈlaɪv.li/</span>
+                  </div>
+                  <span class="tag warm">Speaking</span>
+                </div>
+                <div class="mini-row">
+                  <div>
+                    <strong>atmosphere</strong>
+                    <span>/ˈæt.mə.sfɪr/</span>
+                  </div>
+                  <span class="tag">Vocabulary</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="view-history">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Archive</p>
+              <h3>Past picture practice</h3>
+            </div>
+            <div class="history-header-actions">
+              <button class="ghost-button" id="jump-today-history">Reset</button>
+              <button class="ghost-button" id="open-months">Browse Months</button>
+            </div>
+          </div>
+
+          <article class="panel history-toolbar">
+            <div class="history-controls">
+              <label class="search-field">
+                <span class="eyebrow">Search</span>
+                <input
+                  type="search"
+                  id="history-search"
+                  placeholder="Search by topic, scene, keyword, or mood"
+                />
+              </label>
+
+              <label class="date-field">
+                <span class="eyebrow">Find By Date</span>
+                <input type="date" id="history-date" />
+              </label>
+            </div>
+
+            <div class="month-strip" id="month-strip">
+              <button class="month-pill is-active" data-month="all">All</button>
+              <button class="month-pill" data-month="2026-03">Mar 2026</button>
+              <button class="month-pill" data-month="2026-02">Feb 2026</button>
+              <button class="month-pill" data-month="2026-01">Jan 2026</button>
+            </div>
+          </article>
+
+          <article class="panel month-summary">
+            <div>
+              <p class="eyebrow">Month Manager</p>
+              <h4 id="month-summary-title">All Months</h4>
+            </div>
+            <div class="month-stats">
+              <div>
+                <strong id="month-session-count">0 sessions</strong>
+                <span>matched in current view</span>
+              </div>
+              <div>
+                <strong>Search + browse</strong>
+                <span>by exact date or by month collection</span>
+              </div>
+            </div>
+          </article>
+
+          <div class="history-grid">
+            <article
+              class="history-card panel"
+              data-month="2026-03"
+              data-date="2026-03-18"
+              data-search="cafe conversation people relationship indoor atmosphere march"
+            >
+              <img
+                src="https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=800&q=80"
+                alt="A cozy cafe with people talking"
+              />
+              <div class="history-copy">
+                <p class="eyebrow">Mar 18</p>
+                <h4>Cafe conversation</h4>
+                <p>
+                  You described relationships, body language, and the relaxed
+                  indoor atmosphere.
+                </p>
+              </div>
+            </article>
+
+            <article
+              class="history-card panel"
+              data-month="2026-03"
+              data-date="2026-03-17"
+              data-search="beach sunset scenery waves walking emotion nature march"
+            >
+              <img
+                src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80"
+                alt="A beach with waves and people walking"
+              />
+              <div class="history-copy">
+                <p class="eyebrow">Mar 17</p>
+                <h4>Beach sunset</h4>
+                <p>
+                  Practice focused on scenery words, emotions, and fluid spoken
+                  descriptions.
+                </p>
+              </div>
+            </article>
+
+            <article
+              class="history-card panel"
+              data-month="2026-03"
+              data-date="2026-03-16"
+              data-search="library study hour books quiet academic learning march"
+            >
+              <img
+                src="https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=800&q=80"
+                alt="A library with warm light"
+              />
+              <div class="history-copy">
+                <p class="eyebrow">Mar 16</p>
+                <h4>Library study hour</h4>
+                <p>
+                  Good correction set for singular/plural grammar and clearer
+                  pronunciation of academic words.
+                </p>
+              </div>
+            </article>
+
+            <article
+              class="history-card panel"
+              data-month="2026-02"
+              data-date="2026-02-24"
+              data-search="rainy city umbrella traffic street reflection weather february"
+            >
+              <img
+                src="https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=800&q=80"
+                alt="A rainy city street with umbrellas"
+              />
+              <div class="history-copy">
+                <p class="eyebrow">Feb 24</p>
+                <h4>Rainy city walk</h4>
+                <p>
+                  Focused on weather vocabulary, movement verbs, and speaking more
+                  clearly about atmosphere.
+                </p>
+              </div>
+            </article>
+
+            <article
+              class="history-card panel"
+              data-month="2026-02"
+              data-date="2026-02-10"
+              data-search="kitchen cooking family dinner food steam home february"
+            >
+              <img
+                src="https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?auto=format&fit=crop&w=800&q=80"
+                alt="A kitchen counter with cooking ingredients"
+              />
+              <div class="history-copy">
+                <p class="eyebrow">Feb 10</p>
+                <h4>Cooking at home</h4>
+                <p>
+                  Practiced food descriptions, actions in progress, and sentence
+                  linking.
+                </p>
+              </div>
+            </article>
+
+            <article
+              class="history-card panel"
+              data-month="2026-01"
+              data-date="2026-01-28"
+              data-search="train station commute waiting luggage travel platform january"
+            >
+              <img
+                src="https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=800&q=80"
+                alt="A train station platform with travelers"
+              />
+              <div class="history-copy">
+                <p class="eyebrow">Jan 28</p>
+                <h4>Station commute</h4>
+                <p>
+                  Good practice for travel expressions, location words, and
+                  pronunciation of multi-syllable nouns.
+                </p>
+              </div>
+            </article>
+          </div>
+
+          <div class="pagination-bar">
+            <button class="ghost-button small-button" id="history-prev">
+              Previous
+            </button>
+            <div class="pagination-status" id="history-page-status">
+              Page 1 of 1
+            </div>
+            <button class="ghost-button small-button" id="history-next">
+              Next
+            </button>
+          </div>
+        </section>
+
+        <section class="view" id="view-vocabulary">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Word Bank</p>
+              <h3>Reading list</h3>
+            </div>
+            <button class="ghost-button">Word Management</button>
+          </div>
+
+          <div class="toggle-row review-mode-toggle word-mode-toggle">
+            <button class="toggle-button is-active" data-word-mode="vocabulary-lite">
+              Lite Mode
+            </button>
+            <button class="toggle-button" data-word-mode="vocabulary-full">
+              Full Mode
+            </button>
+          </div>
+
+          <article class="panel list-toolbar">
+            <div class="list-toolbar-row">
+              <label class="search-field">
+                <span class="eyebrow">Search</span>
+                <input
+                  type="search"
+                  id="vocabulary-search"
+                  placeholder="Search word, meaning, or date"
+                />
+              </label>
+
+              <label class="date-field compact-field">
+                <span class="eyebrow">Order</span>
+                <select id="vocabulary-sort">
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="az">A to Z</option>
+                </select>
+              </label>
+            </div>
+          </article>
+
+          <div class="panel word-mode-panel is-visible" id="vocabulary-lite-panel">
+            <div class="lite-word-list">
+              <div class="lite-word-row">
+                <strong>vendor</strong>
+                <button class="inline-audio-button" data-word-audio="vendor" aria-label="Play pronunciation for vendor">&#128264;</button>
+              </div>
+              <div class="lite-word-row">
+                <strong>atmosphere</strong>
+                <button class="inline-audio-button" data-word-audio="atmosphere" aria-label="Play pronunciation for atmosphere">&#128264;</button>
+              </div>
+              <div class="lite-word-row">
+                <strong>fresh produce</strong>
+                <button class="inline-audio-button" data-word-audio="fresh produce" aria-label="Play pronunciation for fresh produce">&#128264;</button>
+              </div>
+              <div class="lite-word-row">
+                <strong>market</strong>
+                <button class="inline-audio-button" data-word-audio="market" aria-label="Play pronunciation for market">&#128264;</button>
+              </div>
+              <div class="lite-word-row">
+                <strong>crowded</strong>
+                <button class="inline-audio-button" data-word-audio="crowded" aria-label="Play pronunciation for crowded">&#128264;</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="speaking-grid word-mode-panel" id="vocabulary-full-panel">
+            <article
+              class="panel practice-target word-card-entry word-entry"
+              data-word-list="vocabulary"
+              data-word="vendor"
+              data-meaning="a person who sells something"
+              data-date="2026-03-20"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Saved Today</p>
+                  <h4>vendor</h4>
+                </div>
+                <button
+                  class="inline-audio-button"
+                  data-word-audio="vendor"
+                  aria-label="Play pronunciation for vendor"
+                >
+                  &#128264;
+                </button>
+              </div>
+              <p class="phonetic">/ˈven.dər/</p>
+              <p class="meaning">a person who sells something</p>
+              <p class="memory-line">Reading record: Right 3 / Wrong 1</p>
+              <p class="example">Example: “A street vendor is smiling at the customer.”</p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+              </div>
+            </article>
+
+            <article
+              class="panel practice-target word-card-entry word-entry"
+              data-word-list="vocabulary"
+              data-word="atmosphere"
+              data-meaning="the feeling or mood of a place"
+              data-date="2026-03-20"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Saved Today</p>
+                  <h4>atmosphere</h4>
+                </div>
+                <button
+                  class="inline-audio-button"
+                  data-word-audio="atmosphere"
+                  aria-label="Play pronunciation for atmosphere"
+                >
+                  &#128264;
+                </button>
+              </div>
+              <p class="phonetic">/ˈæt.mə.sfɪr/</p>
+              <p class="meaning">the feeling or mood of a place</p>
+              <p class="memory-line">Reading record: Right 2 / Wrong 2</p>
+              <p class="example">Example: “The cafe has a warm and peaceful atmosphere.”</p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+              </div>
+            </article>
+
+            <article
+              class="panel practice-target word-card-entry word-entry"
+              data-word-list="vocabulary"
+              data-word="fresh produce"
+              data-meaning="fruit and vegetables for sale"
+              data-date="2026-03-18"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Saved Mar 18</p>
+                  <h4>fresh produce</h4>
+                </div>
+                <button
+                  class="inline-audio-button"
+                  data-word-audio="fresh produce"
+                  aria-label="Play pronunciation for fresh produce"
+                >
+                  &#128264;
+                </button>
+              </div>
+              <p class="phonetic">/freʃ ˈproʊ.duːs/</p>
+              <p class="meaning">fruit and vegetables for sale</p>
+              <p class="memory-line">Reading record: Right 1 / Wrong 2</p>
+              <p class="example">Example: “The market is full of fresh produce this morning.”</p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+              </div>
+            </article>
+
+            <article
+              class="panel practice-target word-card-entry word-entry"
+              data-word-list="vocabulary"
+              data-word="market"
+              data-meaning="a place where people buy and sell goods"
+              data-date="2026-03-17"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Saved Mar 17</p>
+                  <h4>market</h4>
+                </div>
+                <button
+                  class="inline-audio-button"
+                  data-word-audio="market"
+                  aria-label="Play pronunciation for market"
+                >
+                  &#128264;
+                </button>
+              </div>
+              <p class="phonetic">/ˈmɑːr.kɪt/</p>
+              <p class="meaning">a place where people buy and sell goods</p>
+              <p class="memory-line">Reading record: Right 4 / Wrong 0</p>
+              <p class="example">Example: “Many people visit the market before noon.”</p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+              </div>
+            </article>
+
+            <article
+              class="panel practice-target word-card-entry word-entry"
+              data-word-list="vocabulary"
+              data-word="crowded"
+              data-meaning="full of many people in one place"
+              data-date="2026-03-16"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Saved Mar 16</p>
+                  <h4>crowded</h4>
+                </div>
+                <button
+                  class="inline-audio-button"
+                  data-word-audio="crowded"
+                  aria-label="Play pronunciation for crowded"
+                >
+                  &#128264;
+                </button>
+              </div>
+              <p class="phonetic">/ˈkraʊ.dɪd/</p>
+              <p class="meaning">full of many people in one place</p>
+              <p class="memory-line">Reading record: Right 1 / Wrong 3</p>
+              <p class="example">Example: “The train station becomes crowded in the evening.”</p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="pagination-bar list-pagination">
+            <button class="ghost-button small-button" id="vocabulary-prev">
+              Previous
+            </button>
+            <div class="pagination-status" id="vocabulary-page-status">
+              Page 1 of 1
+            </div>
+            <button class="ghost-button small-button" id="vocabulary-next">
+              Next
+            </button>
+          </div>
+        </section>
+
+        <section class="view" id="view-speaking">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Pronunciation Targets</p>
+              <h3>Speaking practice list</h3>
+            </div>
+            <span class="status-pill">Shortcut enabled: S</span>
+          </div>
+
+          <div class="toggle-row review-mode-toggle word-mode-toggle">
+            <button class="toggle-button is-active" data-word-mode="speaking-lite">
+              Lite Mode
+            </button>
+            <button class="toggle-button" data-word-mode="speaking-full">
+              Full Mode
+            </button>
+          </div>
+
+          <article class="panel list-toolbar">
+            <div class="list-toolbar-row">
+              <label class="search-field">
+                <span class="eyebrow">Search</span>
+                <input
+                  type="search"
+                  id="speaking-search"
+                  placeholder="Search word, meaning, or practice target"
+                />
+              </label>
+
+              <label class="date-field compact-field">
+                <span class="eyebrow">Order</span>
+                <select id="speaking-sort">
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="az">A to Z</option>
+                </select>
+              </label>
+            </div>
+          </article>
+
+          <div class="panel word-mode-panel is-visible" id="speaking-lite-panel">
+            <div class="lite-word-list">
+              <div class="lite-word-row">
+                <strong>lively</strong>
+                <button class="inline-audio-button" data-word-audio="lively" aria-label="Play pronunciation for lively">&#128264;</button>
+              </div>
+              <div class="lite-word-row">
+                <strong>seller</strong>
+                <button class="inline-audio-button" data-word-audio="seller" aria-label="Play pronunciation for seller">&#128264;</button>
+              </div>
+              <div class="lite-word-row">
+                <strong>atmosphere</strong>
+                <button class="inline-audio-button" data-word-audio="atmosphere" aria-label="Play pronunciation for atmosphere">&#128264;</button>
+              </div>
+              <div class="lite-word-row">
+                <strong>vendor</strong>
+                <button class="inline-audio-button" data-word-audio="vendor" aria-label="Play pronunciation for vendor">&#128264;</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="speaking-grid word-mode-panel" id="speaking-full-panel">
+            <article
+              class="panel practice-target word-card-entry"
+              data-word-list="speaking"
+              data-word="lively"
+              data-meaning="full of energy and excitement"
+              data-date="2026-03-20"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Flagged Today</p>
+                  <h4>lively</h4>
+                </div>
+                <button class="icon-button" aria-label="Play pronunciation">
+                  &#9658;
+                </button>
+              </div>
+              <p class="phonetic">/ˈlaɪv.li/</p>
+              <p class="meaning">full of energy and excitement</p>
+              <p class="memory-line">Speaking record: Right 2 / Wrong 3</p>
+              <p class="example">
+                “The street feels lively because many people are shopping and
+                talking.”
+              </p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+                <button class="primary-button small-button">Practice</button>
+                <button class="ghost-button small-button">Judge</button>
+              </div>
+            </article>
+
+            <article
+              class="panel practice-target word-card-entry"
+              data-word-list="speaking"
+              data-word="seller"
+              data-meaning="someone who sells goods"
+              data-date="2026-03-16"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Flagged Mar 16</p>
+                  <h4>seller</h4>
+                </div>
+                <button class="icon-button" aria-label="Play pronunciation">
+                  &#9658;
+                </button>
+              </div>
+              <p class="phonetic">/ˈsel.ər/</p>
+              <p class="meaning">someone who sells goods</p>
+              <p class="memory-line">Speaking record: Right 1 / Wrong 4</p>
+              <p class="example">
+                “One seller is smiling at the customer near the fruit stand.”
+              </p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+                <button class="primary-button small-button">Practice</button>
+                <button class="ghost-button small-button">Judge</button>
+              </div>
+            </article>
+
+            <article
+              class="panel practice-target word-card-entry"
+              data-word-list="speaking"
+              data-word="atmosphere"
+              data-meaning="the feeling or mood of a place"
+              data-date="2026-03-14"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Flagged Mar 14</p>
+                  <h4>atmosphere</h4>
+                </div>
+                <button class="icon-button" aria-label="Play pronunciation">
+                  &#9658;
+                </button>
+              </div>
+              <p class="phonetic">/ˈæt.mə.sfɪr/</p>
+              <p class="meaning">the feeling or mood of a place</p>
+              <p class="memory-line">Speaking record: Right 3 / Wrong 1</p>
+              <p class="example">
+                “The atmosphere feels warm, welcoming, and a little crowded.”
+              </p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+                <button class="primary-button small-button">Practice</button>
+                <button class="ghost-button small-button">Judge</button>
+              </div>
+            </article>
+
+            <article
+              class="panel practice-target word-card-entry"
+              data-word-list="speaking"
+              data-word="vendor"
+              data-meaning="a person selling items in a public place"
+              data-date="2026-03-12"
+            >
+              <div class="target-top">
+                <div>
+                  <p class="eyebrow">Flagged Mar 12</p>
+                  <h4>vendor</h4>
+                </div>
+                <button class="icon-button" aria-label="Play pronunciation">
+                  &#9658;
+                </button>
+              </div>
+              <p class="phonetic">/ˈven.dər/</p>
+              <p class="meaning">a person selling items in a public place</p>
+              <p class="memory-line">Speaking record: Right 2 / Wrong 2</p>
+              <p class="example">
+                “The vendor is arranging oranges while talking to a customer.”
+              </p>
+              <div class="action-row">
+                <button class="ghost-button small-button">Delete</button>
+                <button class="primary-button small-button">Practice</button>
+                <button class="ghost-button small-button">Judge</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="pagination-bar list-pagination">
+            <button class="ghost-button small-button" id="speaking-prev">
+              Previous
+            </button>
+            <div class="pagination-status" id="speaking-page-status">
+              Page 1 of 1
+            </div>
+            <button class="ghost-button small-button" id="speaking-next">
+              Next
+            </button>
+          </div>
+        </section>
+
+        <section class="view" id="view-settings">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Review Center</p>
+              <h3>Settings and review tests</h3>
+            </div>
+            <button class="ghost-button">Learning Controls</button>
+          </div>
+
+          <div class="toggle-row review-mode-toggle">
+            <button class="toggle-button is-active" data-review-tab="vocabulary">
+              Vocabulary
+            </button>
+            <button class="toggle-button" data-review-tab="speaking">
+              Speaking
+            </button>
+          </div>
+
+          <div class="review-tab is-visible" id="review-tab-vocabulary">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Vocabulary Review Test</p>
+                  <h3>Do I still remember this word?</h3>
+                </div>
+                <span class="status-pill">Tap only</span>
+              </div>
+
+              <div class="review-setup">
+                <label class="date-field compact-field">
+                  <span class="eyebrow">How Many Words</span>
+                  <select id="review-word-count">
+                    <option>5 words</option>
+                    <option selected>10 words</option>
+                    <option>15 words</option>
+                    <option>20 words</option>
+                  </select>
+                </label>
+                <button class="primary-button small-button">Start Review</button>
+              </div>
+
+              <div class="review-card">
+                <div class="review-word-row">
+                  <div>
+                    <p class="eyebrow">Word 3 of 10</p>
+                    <h4>atmosphere</h4>
+                    <p class="phonetic">/ˈæt.mə.sfɪr/</p>
+                  </div>
+                  <button
+                    class="icon-button"
+                    aria-label="Play vocabulary review pronunciation"
+                  >
+                    &#128264;
+                  </button>
+                </div>
+
+                <div class="review-actions">
+                  <button class="primary-button small-button" id="review-yes">Y</button>
+                  <button class="ghost-button small-button" id="review-no">N</button>
+                  <button class="ghost-button small-button">I Remember Wrong</button>
+                </div>
+
+                <div class="review-meaning is-hidden" id="review-meaning-panel">
+                  <p class="eyebrow">Meaning Check</p>
+                  <p>The feeling or mood of a place.</p>
+                  <p class="memory-line">
+                    Memory record: Remembered 2 times, forgot 2 times.
+                  </p>
+                </div>
+
+                <div class="action-row">
+                  <button class="ghost-button small-button">Previous</button>
+                  <button class="primary-button small-button">Next Word</button>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="review-tab" id="review-tab-speaking">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Speaking Review Test</p>
+                  <h3>Say the word again</h3>
+                </div>
+                <span class="status-pill">AI judgment</span>
+              </div>
+
+              <div class="review-card speaking-review-card">
+                <div class="review-word-row">
+                  <div>
+                    <p class="eyebrow">Speaking word 2 of 5</p>
+                    <h4>lively</h4>
+                    <p class="phonetic is-hidden" id="speaking-phonetic">
+                      /ˈlaɪv.li/
+                    </p>
+                  </div>
+                  <button
+                    class="icon-button"
+                    aria-label="Play speaking review pronunciation"
+                  >
+                    &#128264;
+                  </button>
+                </div>
+
+                <p class="meaning">
+                  Say the word clearly, then let AI judge whether your
+                  pronunciation is correct.
+                </p>
+
+                <div class="waveform review-wave">
+                  <span></span><span></span><span></span><span></span><span></span
+                  ><span></span><span></span><span></span>
+                </div>
+
+                <div class="action-row">
+                  <button class="primary-button small-button">Start Speaking</button>
+                  <button class="ghost-button small-button" id="run-ai-judge">
+                    Let AI Judge
+                  </button>
+                </div>
+
+                <div class="review-meaning">
+                  <p class="eyebrow">AI Result</p>
+                  <p>Latest result: pronunciation was unclear on the ending sound.</p>
+                  <p class="memory-line is-hidden" id="speaking-memory-line">
+                    Speaking record: Right 2 times, wrong 3 times.
+                  </p>
+                  <p class="memory-line">Meaning: full of energy and excitement.</p>
+                  <p class="memory-line">
+                    Example: “The street feels lively because many people are shopping.”
+                  </p>
+                </div>
+
+                <div class="action-row">
+                  <button class="ghost-button small-button">Previous</button>
+                  <button class="primary-button small-button">Next Word</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <aside class="word-drawer" id="word-drawer" aria-hidden="true">
+      <div class="drawer-top">
+        <p class="eyebrow">Quick word check</p>
+        <button class="icon-button" id="close-drawer" aria-label="Close panel">
+          &#10005;
+        </button>
+      </div>
+      <h3 id="drawer-word">lively</h3>
+      <p class="phonetic" id="drawer-phonetic">/ˈlaɪv.li/</p>
+      <p class="drawer-meaning" id="drawer-meaning">
+        full of energy, movement, and excitement
+      </p>
+      <p class="drawer-example" id="drawer-example">
+        Example: “The market looks lively because many people are shopping.”
+      </p>
+      <div class="drawer-actions">
+        <button class="ghost-button" id="play-audio">Play Sound</button>
+        <button class="ghost-button" id="add-vocabulary">Add to Vocabulary</button>
+        <button class="primary-button" id="add-speaking">Add to Speaking List</button>
+      </div>
+    </aside>
+
+    <div class="shortcut-toast" id="shortcut-toast" aria-live="polite"></div>
+
+    <script type="module" src="./script.js"></script>
+  </body>
+</html>
