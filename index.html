@@ -45,8 +45,7 @@
         <section class="sidebar-card shortcut-card">
           <p class="eyebrow">Shortcut</p>
           <p>
-            Press <kbd>S</kbd> to add the selected feedback word into the speaking
-            list faster.
+            Select a word, then press <kbd>R</kbd> or <kbd>S</kbd>.
           </p>
         </section>
       </aside>
@@ -54,7 +53,7 @@
       <main class="main">
         <header class="topbar">
           <div>
-            <p class="eyebrow">March 19</p>
+            <p class="eyebrow" id="today-date">March 19</p>
             <h2>Daily Practice</h2>
           </div>
           <div class="topbar-actions">
@@ -71,11 +70,12 @@
                 <span class="muted">2 min</span>
               </div>
               <img
+                id="daily-image"
                 src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80"
                 alt="A bright morning market street with fruit stands and people walking"
               />
               <div class="picture-caption">
-                <h3>Describe this street market.</h3>
+                <h3 id="daily-prompt-title">Describe this street market.</h3>
               </div>
             </article>
 
@@ -85,10 +85,10 @@
                   <p class="eyebrow">Speak</p>
                   <h3>Your voice</h3>
                 </div>
-                <span class="status-pill">Microphone ready</span>
+                <span class="status-pill" id="mic-status">Microphone ready</span>
               </div>
 
-              <button class="record-button" type="button">
+              <button class="record-button" id="record-button" type="button">
                 <span class="record-core"></span>
               </button>
 
@@ -99,7 +99,7 @@
 
               <div class="transcript-box">
                 <p class="eyebrow">Transcript</p>
-                <p>
+                <p id="transcript-text">
                   I think this picture show a busy market. Many people is walking
                   and some seller are smiling. The fruits look very fresh and the
                   street feels lively.
@@ -107,8 +107,8 @@
               </div>
 
               <div class="action-row">
-                <button class="ghost-button">Try Again</button>
-                <button class="primary-button">Submit to AI</button>
+                <button class="ghost-button" id="retry-button">Try Again</button>
+                <button class="primary-button" id="submit-button">Submit to AI</button>
               </div>
             </article>
           </div>
@@ -124,21 +124,21 @@
 
               <div class="feedback-block">
                 <div class="feedback-label">Grammar fix</div>
-                <p class="feedback-original">
+                <p class="feedback-original" id="grammar-original">
                   “this picture <span class="mistake grammar">show</span> a busy
                   market”
                 </p>
-                <p class="feedback-corrected">
+                <p class="feedback-corrected" id="grammar-corrected">
                   Correct: “this picture <strong>shows</strong> a busy market”
                 </p>
-                <p class="feedback-note">
+                <p class="feedback-note" id="grammar-note">
                   Use <strong>shows</strong> because the subject is singular.
                 </p>
               </div>
 
               <div class="feedback-block">
                 <div class="feedback-label">Pronunciation fix</div>
-                <p class="feedback-original">
+                <p class="feedback-original" id="pronunciation-flags">
                   Flagged words:
                   <button class="word-chip issue" data-word="seller">
                     seller
@@ -168,7 +168,7 @@
               </div>
 
               <div class="model-copy is-visible" id="model-easy">
-                <p>
+                <p id="model-easy-text">
                   This picture shows a busy market in the morning. Many people
                   are walking around and looking at fresh fruit. The sellers seem
                   friendly, and the street feels colorful and lively.
@@ -176,7 +176,7 @@
               </div>
 
               <div class="model-copy" id="model-advanced">
-                <p>
+                <p id="model-advanced-text">
                   The image captures a vibrant open-air market where shoppers are
                   moving through a lively street lined with fresh produce. The
                   bright colors, relaxed expressions, and natural light create a
@@ -195,7 +195,7 @@
                 </div>
               </div>
 
-              <div class="chip-grid">
+              <div class="chip-grid" id="keyword-grid">
                 <button class="word-chip" data-word="market">market</button>
                 <button class="word-chip" data-word="vendor">vendor</button>
                 <button class="word-chip" data-word="fresh produce">
@@ -217,7 +217,7 @@
                 </div>
               </div>
 
-              <div class="mini-list">
+              <div class="mini-list" id="recent-saved-list">
                 <div class="mini-row">
                   <div>
                     <strong>vendor</strong>
@@ -298,7 +298,7 @@
             </div>
           </article>
 
-          <div class="history-grid">
+          <div class="history-grid" id="history-grid">
             <article
               class="history-card panel"
               data-month="2026-03"
@@ -474,7 +474,7 @@
           </article>
 
           <div class="panel word-mode-panel is-visible" id="vocabulary-lite-panel">
-            <div class="lite-word-list">
+            <div class="lite-word-list" id="vocabulary-lite-list">
               <div class="lite-word-row">
                 <strong>vendor</strong>
                 <button class="inline-audio-button" data-word-audio="vendor" aria-label="Play pronunciation for vendor">&#128264;</button>
@@ -699,7 +699,7 @@
           </article>
 
           <div class="panel word-mode-panel is-visible" id="speaking-lite-panel">
-            <div class="lite-word-list">
+            <div class="lite-word-list" id="speaking-lite-list">
               <div class="lite-word-row">
                 <strong>lively</strong>
                 <button class="inline-audio-button" data-word-audio="lively" aria-label="Play pronunciation for lively">&#128264;</button>
@@ -889,18 +889,19 @@
                     <option>20 words</option>
                   </select>
                 </label>
-                <button class="primary-button small-button">Start Review</button>
+                <button class="primary-button small-button" id="start-reading-review">Start Review</button>
               </div>
 
               <div class="review-card">
                 <div class="review-word-row">
                   <div>
-                    <p class="eyebrow">Word 3 of 10</p>
-                    <h4>atmosphere</h4>
-                    <p class="phonetic">/ˈæt.mə.sfɪr/</p>
+                    <p class="eyebrow" id="reading-review-progress">Word 3 of 10</p>
+                    <h4 id="reading-review-word">atmosphere</h4>
+                    <p class="phonetic" id="reading-review-phonetic">/ˈæt.mə.sfɪr/</p>
                   </div>
                   <button
                     class="icon-button"
+                    id="reading-review-audio"
                     aria-label="Play vocabulary review pronunciation"
                   >
                     &#128264;
@@ -910,20 +911,20 @@
                 <div class="review-actions">
                   <button class="primary-button small-button" id="review-yes">Y</button>
                   <button class="ghost-button small-button" id="review-no">N</button>
-                  <button class="ghost-button small-button">I Remember Wrong</button>
+                  <button class="ghost-button small-button" id="reading-review-wrong">I Remember Wrong</button>
                 </div>
 
                 <div class="review-meaning is-hidden" id="review-meaning-panel">
                   <p class="eyebrow">Meaning Check</p>
-                  <p>The feeling or mood of a place.</p>
-                  <p class="memory-line">
+                  <p id="reading-review-meaning">The feeling or mood of a place.</p>
+                  <p class="memory-line" id="reading-review-memory">
                     Memory record: Remembered 2 times, forgot 2 times.
                   </p>
                 </div>
 
                 <div class="action-row">
-                  <button class="ghost-button small-button">Previous</button>
-                  <button class="primary-button small-button">Next Word</button>
+                  <button class="ghost-button small-button" id="reading-review-prev">Previous</button>
+                  <button class="primary-button small-button" id="reading-review-next">Next Word</button>
                 </div>
               </div>
             </article>
@@ -942,21 +943,22 @@
               <div class="review-card speaking-review-card">
                 <div class="review-word-row">
                   <div>
-                    <p class="eyebrow">Speaking word 2 of 5</p>
-                    <h4>lively</h4>
+                    <p class="eyebrow" id="speaking-review-progress">Speaking word 2 of 5</p>
+                    <h4 id="speaking-review-word">lively</h4>
                     <p class="phonetic is-hidden" id="speaking-phonetic">
                       /ˈlaɪv.li/
                     </p>
                   </div>
                   <button
                     class="icon-button"
+                    id="speaking-review-audio"
                     aria-label="Play speaking review pronunciation"
                   >
                     &#128264;
                   </button>
                 </div>
 
-                <p class="meaning">
+                <p class="meaning" id="speaking-review-helper">
                   Say the word clearly, then let AI judge whether your
                   pronunciation is correct.
                 </p>
@@ -967,7 +969,7 @@
                 </div>
 
                 <div class="action-row">
-                  <button class="primary-button small-button">Start Speaking</button>
+                  <button class="primary-button small-button" id="start-speaking-review">Start Speaking</button>
                   <button class="ghost-button small-button" id="run-ai-judge">
                     Let AI Judge
                   </button>
@@ -975,19 +977,19 @@
 
                 <div class="review-meaning">
                   <p class="eyebrow">AI Result</p>
-                  <p>Latest result: pronunciation was unclear on the ending sound.</p>
+                  <p id="speaking-review-result">Latest result: pronunciation was unclear on the ending sound.</p>
                   <p class="memory-line is-hidden" id="speaking-memory-line">
                     Speaking record: Right 2 times, wrong 3 times.
                   </p>
-                  <p class="memory-line">Meaning: full of energy and excitement.</p>
-                  <p class="memory-line">
+                  <p class="memory-line" id="speaking-review-meaning">Meaning: full of energy and excitement.</p>
+                  <p class="memory-line" id="speaking-review-example">
                     Example: “The street feels lively because many people are shopping.”
                   </p>
                 </div>
 
                 <div class="action-row">
-                  <button class="ghost-button small-button">Previous</button>
-                  <button class="primary-button small-button">Next Word</button>
+                  <button class="ghost-button small-button" id="speaking-review-prev">Previous</button>
+                  <button class="primary-button small-button" id="speaking-review-next">Next Word</button>
                 </div>
               </div>
             </article>
@@ -1013,7 +1015,7 @@
       </p>
       <div class="drawer-actions">
         <button class="ghost-button" id="play-audio">Play Sound</button>
-        <button class="ghost-button" id="add-vocabulary">Add to Vocabulary</button>
+        <button class="ghost-button" id="add-vocabulary">Add to Reading</button>
         <button class="primary-button" id="add-speaking">Add to Speaking List</button>
       </div>
     </aside>

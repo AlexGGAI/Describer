@@ -1,524 +1,937 @@
-const views = {
-  today: document.getElementById("view-today"),
-  history: document.getElementById("view-history"),
-  vocabulary: document.getElementById("view-vocabulary"),
-  speaking: document.getElementById("view-speaking"),
-  settings: document.getElementById("view-settings"),
+const STORAGE_KEY = "describer-state-v1";
+const SpeechRecognitionApi =
+  window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const synth = window.speechSynthesis || null;
+
+const todayPrompt = {
+  date: "2026-03-20",
+  title: "Describe this street market.",
+  image:
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+  alt: "A bright morning market street with fruit stands and people walking",
+  easy:
+    "This picture shows a busy market in the morning. Many people are walking around and looking at fresh fruit. The sellers seem friendly, and the street feels colorful and lively.",
+  advanced:
+    "The image captures a vibrant open-air market where shoppers are moving through a lively street lined with fresh produce. The bright colors, relaxed expressions, and natural light create a warm and energetic atmosphere.",
+  keywords: ["market", "vendor", "fresh produce", "crowded", "lively", "atmosphere"],
 };
-
-const drawer = document.getElementById("word-drawer");
-const drawerWord = document.getElementById("drawer-word");
-const drawerPhonetic = document.getElementById("drawer-phonetic");
-const drawerMeaning = document.getElementById("drawer-meaning");
-const drawerExample = document.getElementById("drawer-example");
-const shortcutToast = document.getElementById("shortcut-toast");
-const historyCards = Array.from(document.querySelectorAll(".history-card"));
-const historySearch = document.getElementById("history-search");
-const historyDate = document.getElementById("history-date");
-const monthButtons = Array.from(document.querySelectorAll(".month-pill"));
-const monthSummaryTitle = document.getElementById("month-summary-title");
-const monthSessionCount = document.getElementById("month-session-count");
-const historyPrev = document.getElementById("history-prev");
-const historyNext = document.getElementById("history-next");
-const historyPageStatus = document.getElementById("history-page-status");
-const vocabularyEntries = Array.from(
-  document.querySelectorAll('.word-entry[data-word-list="vocabulary"]')
-);
-const vocabularySearch = document.getElementById("vocabulary-search");
-const vocabularySort = document.getElementById("vocabulary-sort");
-const vocabularyPrev = document.getElementById("vocabulary-prev");
-const vocabularyNext = document.getElementById("vocabulary-next");
-const vocabularyPageStatus = document.getElementById("vocabulary-page-status");
-const speakingEntries = Array.from(
-  document.querySelectorAll('.word-card-entry[data-word-list="speaking"]')
-);
-const speakingSearch = document.getElementById("speaking-search");
-const speakingSort = document.getElementById("speaking-sort");
-const speakingPrev = document.getElementById("speaking-prev");
-const speakingNext = document.getElementById("speaking-next");
-const speakingPageStatus = document.getElementById("speaking-page-status");
-const reviewMeaningPanel = document.getElementById("review-meaning-panel");
-const reviewYes = document.getElementById("review-yes");
-const reviewNo = document.getElementById("review-no");
-const speakingPhonetic = document.getElementById("speaking-phonetic");
-const speakingMemoryLine = document.getElementById("speaking-memory-line");
-const runAiJudge = document.getElementById("run-ai-judge");
-
-let currentMonth = "all";
-let currentPage = 1;
-const pageSize = 3;
-let vocabularyPage = 1;
-let speakingPage = 1;
-const vocabularyPageSize = 3;
-const speakingPageSize = 2;
-let selectedWord = null;
-let selectedWordElement = null;
 
 const wordLibrary = {
   seller: {
     phonetic: "/ˈsel.ər/",
     meaning: "someone whose job is selling products",
-    example: "Example: The seller is standing beside the fruit baskets.",
+    example: "The seller is standing beside the fruit baskets.",
   },
   lively: {
     phonetic: "/ˈlaɪv.li/",
     meaning: "full of energy, movement, and excitement",
-    example: "Example: The market looks lively because many people are shopping.",
+    example: "The market looks lively because many people are shopping.",
   },
   market: {
     phonetic: "/ˈmɑːr.kɪt/",
     meaning: "a place where people buy and sell goods",
-    example: "Example: This market is busy in the morning.",
+    example: "This market is busy in the morning.",
   },
   vendor: {
     phonetic: "/ˈven.dər/",
     meaning: "a person selling items, often in a public place",
-    example: "Example: A vendor is arranging fruit on the stand.",
+    example: "A vendor is arranging fruit on the stand.",
   },
   "fresh produce": {
     phonetic: "/freʃ ˈproʊ.duːs/",
     meaning: "fresh fruits and vegetables",
-    example: "Example: The stand is full of fresh produce.",
+    example: "The stand is full of fresh produce.",
   },
   crowded: {
     phonetic: "/ˈkraʊ.dɪd/",
     meaning: "full of many people in one place",
-    example: "Example: The street feels crowded but cheerful.",
+    example: "The street feels crowded but cheerful.",
   },
   atmosphere: {
     phonetic: "/ˈæt.mə.sfɪr/",
     meaning: "the general feeling or mood of a place",
-    example: "Example: The atmosphere is warm and inviting.",
+    example: "The atmosphere is warm and inviting.",
   },
 };
 
+const seedHistory = [
+  {
+    id: "hist-1",
+    date: "2026-03-18",
+    title: "Cafe conversation",
+    summary: "You described relationships, body language, and a relaxed indoor atmosphere.",
+    image:
+      "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "hist-2",
+    date: "2026-03-17",
+    title: "Beach sunset",
+    summary: "Practice focused on scenery words, emotions, and fluid spoken descriptions.",
+    image:
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "hist-3",
+    date: "2026-03-16",
+    title: "Library study hour",
+    summary: "Good correction set for singular/plural grammar and clearer pronunciation.",
+    image:
+      "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "hist-4",
+    date: "2026-02-24",
+    title: "Rainy city walk",
+    summary: "Focused on weather vocabulary, movement verbs, and clearer speaking.",
+    image:
+      "https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "hist-5",
+    date: "2026-02-10",
+    title: "Cooking at home",
+    summary: "Practiced food descriptions, actions in progress, and sentence linking.",
+    image:
+      "https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "hist-6",
+    date: "2026-01-28",
+    title: "Station commute",
+    summary: "Good practice for travel expressions, location words, and pronunciation.",
+    image:
+      "https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=800&q=80",
+  },
+];
+
+function createWord(word, savedAt, rightCount = 0, wrongCount = 0) {
+  return {
+    word,
+    savedAt,
+    rightCount,
+    wrongCount,
+    ...wordLibrary[word],
+  };
+}
+
+function createDefaultState() {
+  return {
+    transcript:
+      "I think this picture show a busy market. Many people is walking and some seller are smiling. The fruits look very fresh and the street feels lively.",
+    feedback: analyzeTranscript(
+      "I think this picture show a busy market. Many people is walking and some seller are smiling. The fruits look very fresh and the street feels lively."
+    ),
+    readingList: [
+      createWord("vendor", "2026-03-20", 3, 1),
+      createWord("atmosphere", "2026-03-20", 2, 2),
+      createWord("fresh produce", "2026-03-18", 1, 2),
+      createWord("market", "2026-03-17", 4, 0),
+      createWord("crowded", "2026-03-16", 1, 3),
+    ],
+    speakingList: [
+      createWord("lively", "2026-03-20", 2, 3),
+      createWord("seller", "2026-03-16", 1, 4),
+      createWord("atmosphere", "2026-03-14", 3, 1),
+      createWord("vendor", "2026-03-12", 2, 2),
+    ],
+    history: seedHistory,
+    review: {
+      readingQueue: [],
+      readingIndex: 0,
+      readingPending: null,
+      speakingIndex: 0,
+      speakingAttempt: "",
+    },
+  };
+}
+
+function loadState() {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (!stored) return createDefaultState();
+  try {
+    const parsed = JSON.parse(stored);
+    return { ...createDefaultState(), ...parsed };
+  } catch {
+    return createDefaultState();
+  }
+}
+
+let state = loadState();
+let selectedWord = null;
+let selectedWordElement = null;
+let currentMonth = "all";
+let historyPage = 1;
+let readingPage = 1;
+let speakingPage = 1;
+const pageSize = 3;
+const listPageSize = 4;
+let activeRecognition = null;
+let recognitionMode = null;
+
+const elements = {
+  views: {
+    today: document.getElementById("view-today"),
+    history: document.getElementById("view-history"),
+    vocabulary: document.getElementById("view-vocabulary"),
+    speaking: document.getElementById("view-speaking"),
+    settings: document.getElementById("view-settings"),
+  },
+  todayDate: document.getElementById("today-date"),
+  dailyImage: document.getElementById("daily-image"),
+  dailyPromptTitle: document.getElementById("daily-prompt-title"),
+  micStatus: document.getElementById("mic-status"),
+  recordButton: document.getElementById("record-button"),
+  transcriptText: document.getElementById("transcript-text"),
+  retryButton: document.getElementById("retry-button"),
+  submitButton: document.getElementById("submit-button"),
+  grammarOriginal: document.getElementById("grammar-original"),
+  grammarCorrected: document.getElementById("grammar-corrected"),
+  grammarNote: document.getElementById("grammar-note"),
+  pronunciationFlags: document.getElementById("pronunciation-flags"),
+  modelEasyText: document.getElementById("model-easy-text"),
+  modelAdvancedText: document.getElementById("model-advanced-text"),
+  keywordGrid: document.getElementById("keyword-grid"),
+  recentSavedList: document.getElementById("recent-saved-list"),
+  historySearch: document.getElementById("history-search"),
+  historyDate: document.getElementById("history-date"),
+  monthButtons: Array.from(document.querySelectorAll(".month-pill")),
+  monthSummaryTitle: document.getElementById("month-summary-title"),
+  monthSessionCount: document.getElementById("month-session-count"),
+  historyGrid: document.getElementById("history-grid"),
+  historyPrev: document.getElementById("history-prev"),
+  historyNext: document.getElementById("history-next"),
+  historyPageStatus: document.getElementById("history-page-status"),
+  vocabularySearch: document.getElementById("vocabulary-search"),
+  vocabularySort: document.getElementById("vocabulary-sort"),
+  vocabularyLiteList: document.getElementById("vocabulary-lite-list"),
+  vocabularyFullPanel: document.getElementById("vocabulary-full-panel"),
+  vocabularyPrev: document.getElementById("vocabulary-prev"),
+  vocabularyNext: document.getElementById("vocabulary-next"),
+  vocabularyPageStatus: document.getElementById("vocabulary-page-status"),
+  speakingSearch: document.getElementById("speaking-search"),
+  speakingSort: document.getElementById("speaking-sort"),
+  speakingLiteList: document.getElementById("speaking-lite-list"),
+  speakingFullPanel: document.getElementById("speaking-full-panel"),
+  speakingPrev: document.getElementById("speaking-prev"),
+  speakingNext: document.getElementById("speaking-next"),
+  speakingPageStatus: document.getElementById("speaking-page-status"),
+  readingReviewCount: document.getElementById("review-word-count"),
+  startReadingReview: document.getElementById("start-reading-review"),
+  reviewYes: document.getElementById("review-yes"),
+  reviewNo: document.getElementById("review-no"),
+  readingReviewWrong: document.getElementById("reading-review-wrong"),
+  readingReviewProgress: document.getElementById("reading-review-progress"),
+  readingReviewWord: document.getElementById("reading-review-word"),
+  readingReviewPhonetic: document.getElementById("reading-review-phonetic"),
+  readingReviewAudio: document.getElementById("reading-review-audio"),
+  readingReviewMeaningPanel: document.getElementById("review-meaning-panel"),
+  readingReviewMeaning: document.getElementById("reading-review-meaning"),
+  readingReviewMemory: document.getElementById("reading-review-memory"),
+  readingReviewPrev: document.getElementById("reading-review-prev"),
+  readingReviewNext: document.getElementById("reading-review-next"),
+  speakingReviewProgress: document.getElementById("speaking-review-progress"),
+  speakingReviewWord: document.getElementById("speaking-review-word"),
+  speakingReviewAudio: document.getElementById("speaking-review-audio"),
+  speakingReviewHelper: document.getElementById("speaking-review-helper"),
+  speakingPhonetic: document.getElementById("speaking-phonetic"),
+  speakingResult: document.getElementById("speaking-review-result"),
+  speakingMemoryLine: document.getElementById("speaking-memory-line"),
+  speakingMeaning: document.getElementById("speaking-review-meaning"),
+  speakingExample: document.getElementById("speaking-review-example"),
+  startSpeakingReview: document.getElementById("start-speaking-review"),
+  runAiJudge: document.getElementById("run-ai-judge"),
+  speakingReviewPrev: document.getElementById("speaking-review-prev"),
+  speakingReviewNext: document.getElementById("speaking-review-next"),
+  drawer: document.getElementById("word-drawer"),
+  drawerWord: document.getElementById("drawer-word"),
+  drawerPhonetic: document.getElementById("drawer-phonetic"),
+  drawerMeaning: document.getElementById("drawer-meaning"),
+  drawerExample: document.getElementById("drawer-example"),
+  closeDrawer: document.getElementById("close-drawer"),
+  playAudio: document.getElementById("play-audio"),
+  addReading: document.getElementById("add-vocabulary"),
+  addSpeaking: document.getElementById("add-speaking"),
+  shortcutToast: document.getElementById("shortcut-toast"),
+};
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function formatDateLabel(dateString) {
+  const date = new Date(`${dateString}T12:00:00`);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatMonthLabel(month) {
+  if (month === "all") return "All Months";
+  const [year, number] = month.split("-");
+  const date = new Date(Number(year), Number(number) - 1, 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function normalized(value) {
+  return value.toLowerCase().replace(/[^\w\s]/g, "").trim();
+}
+
+function analyzeTranscript(text) {
+  const original = text || "";
+  let corrected = original;
+  const fixes = [
+    {
+      from: /\bpicture show\b/i,
+      to: "picture shows",
+      original: "“this picture show a busy market”",
+      corrected: "Correct: “this picture shows a busy market”",
+      note: "Use shows because the subject is singular.",
+    },
+    {
+      from: /\bpeople is\b/i,
+      to: "people are",
+      original: "“many people is walking”",
+      corrected: "Correct: “many people are walking”",
+      note: "Use are with the plural noun people.",
+    },
+    {
+      from: /\bseller are\b/i,
+      to: "sellers are",
+      original: "“some seller are smiling”",
+      corrected: "Correct: “some sellers are smiling”",
+      note: "Use sellers because some needs a plural noun.",
+    },
+  ];
+
+  let selectedFix = fixes[0];
+  for (const fix of fixes) {
+    if (fix.from.test(corrected)) {
+      corrected = corrected.replace(fix.from, fix.to);
+      selectedFix = fix;
+      break;
+    }
+  }
+  corrected = corrected.replace(/\bpeople is\b/i, "people are");
+  corrected = corrected.replace(/\bseller are\b/i, "sellers are");
+
+  const flagged = Object.keys(wordLibrary).filter((word) =>
+    normalized(original).includes(normalized(word))
+  );
+
+  return {
+    grammarOriginal: selectedFix.original,
+    grammarCorrected: selectedFix.corrected,
+    grammarNote: selectedFix.note,
+    correctedTranscript: corrected,
+    pronunciationWords: flagged.slice(0, 3).length ? flagged.slice(0, 3) : ["seller", "lively"],
+    keywords: todayPrompt.keywords,
+    easy: todayPrompt.easy,
+    advanced: todayPrompt.advanced,
+  };
+}
+
+function showToast(message) {
+  elements.shortcutToast.textContent = message;
+  elements.shortcutToast.classList.add("is-visible");
+  setTimeout(() => elements.shortcutToast.classList.remove("is-visible"), 1200);
+}
+
+function setSelectedWord(word, element) {
+  if (selectedWordElement) selectedWordElement.classList.remove("is-selected");
+  selectedWord = word;
+  selectedWordElement = element;
+  if (selectedWordElement) selectedWordElement.classList.add("is-selected");
+}
+
+function speakWord(word) {
+  if (!synth || !word) return;
+  synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(word);
+  utterance.rate = 0.9;
+  synth.speak(utterance);
+}
+
+function saveWordToList(word, listName) {
+  const listKey = listName === "reading" ? "readingList" : "speakingList";
+  const existing = state[listKey].find((item) => item.word === word);
+  if (!existing) {
+    state[listKey].unshift(createWord(word, todayPrompt.date));
+  }
+  saveState();
+  renderAll();
+  showToast(`Saved "${word}" to ${listName === "reading" ? "Reading" : "Speaking"}`);
+}
+
+function removeWordFromList(word, listName) {
+  const listKey = listName === "reading" ? "readingList" : "speakingList";
+  state[listKey] = state[listKey].filter((item) => item.word !== word);
+  saveState();
+  renderAll();
+}
+
+function sortedWords(words, sortMode) {
+  return [...words].sort((a, b) => {
+    if (sortMode === "az") return a.word.localeCompare(b.word);
+    if (sortMode === "oldest") return a.savedAt.localeCompare(b.savedAt);
+    return b.savedAt.localeCompare(a.savedAt);
+  });
+}
+
+function renderToday() {
+  elements.todayDate.textContent = new Date(`${todayPrompt.date}T12:00:00`).toLocaleDateString(
+    "en-US",
+    { month: "long", day: "numeric" }
+  );
+  elements.dailyImage.src = todayPrompt.image;
+  elements.dailyImage.alt = todayPrompt.alt;
+  elements.dailyPromptTitle.textContent = todayPrompt.title;
+  elements.transcriptText.textContent =
+    state.transcript || "Tap Speak to start describing the picture.";
+  elements.grammarOriginal.textContent = state.feedback.grammarOriginal;
+  elements.grammarCorrected.innerHTML = state.feedback.grammarCorrected.replace(
+    /Correct:/,
+    "<strong>Correct:</strong>"
+  );
+  elements.grammarNote.textContent = state.feedback.grammarNote;
+  elements.modelEasyText.textContent = state.feedback.easy;
+  elements.modelAdvancedText.textContent = state.feedback.advanced;
+
+  elements.pronunciationFlags.innerHTML = `Flagged words: ${state.feedback.pronunciationWords
+    .map(
+      (word) =>
+        `<button class="word-chip issue" data-word-value="${word}" data-word-select="${word}">${word}</button>`
+    )
+    .join(" ")}`;
+
+  elements.keywordGrid.innerHTML = state.feedback.keywords
+    .map(
+      (word) =>
+        `<button class="word-chip" data-word-value="${word}" data-word-select="${word}">${word}</button>`
+    )
+    .join("");
+
+  const recent = [
+    ...state.readingList.slice(0, 2).map((item) => ({ ...item, tag: "Reading" })),
+    ...state.speakingList.slice(0, 2).map((item) => ({ ...item, tag: "Speaking" })),
+  ]
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+    .slice(0, 3);
+
+  elements.recentSavedList.innerHTML = recent
+    .map(
+      (item) => `
+        <div class="mini-row">
+          <div>
+            <strong>${item.word}</strong>
+            <span>${item.phonetic}</span>
+          </div>
+          <span class="tag ${item.tag === "Speaking" ? "warm" : ""}">${item.tag}</span>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderHistory() {
+  const query = elements.historySearch.value.trim().toLowerCase();
+  const dateValue = elements.historyDate.value;
+  const filtered = state.history.filter((entry) => {
+    const matchesMonth = currentMonth === "all" || entry.date.startsWith(currentMonth);
+    const haystack = `${entry.title} ${entry.summary} ${entry.date}`.toLowerCase();
+    const matchesSearch = !query || haystack.includes(query);
+    const matchesDate = !dateValue || entry.date === dateValue;
+    return matchesMonth && matchesSearch && matchesDate;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  historyPage = Math.min(historyPage, totalPages);
+  const visible = filtered.slice((historyPage - 1) * pageSize, historyPage * pageSize);
+
+  elements.historyGrid.innerHTML = visible
+    .map(
+      (entry) => `
+        <article class="history-card panel">
+          <img src="${entry.image}" alt="${entry.title}" />
+          <div class="history-copy">
+            <p class="eyebrow">${formatDateLabel(entry.date)}</p>
+            <h4>${entry.title}</h4>
+            <p>${entry.summary}</p>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+
+  elements.historyPageStatus.textContent = `Page ${historyPage} of ${totalPages}`;
+  elements.historyPrev.disabled = historyPage === 1;
+  elements.historyNext.disabled = historyPage === totalPages;
+  elements.monthSummaryTitle.textContent = formatMonthLabel(currentMonth);
+  elements.monthSessionCount.textContent = `${filtered.length} session${filtered.length === 1 ? "" : "s"}`;
+}
+
+function renderWordList(listName) {
+  const listKey = listName === "reading" ? "readingList" : "speakingList";
+  const searchInput =
+    listName === "reading" ? elements.vocabularySearch : elements.speakingSearch;
+  const sortInput = listName === "reading" ? elements.vocabularySort : elements.speakingSort;
+  const liteList = listName === "reading" ? elements.vocabularyLiteList : elements.speakingLiteList;
+  const fullPanel =
+    listName === "reading" ? elements.vocabularyFullPanel : elements.speakingFullPanel;
+  const pageNode =
+    listName === "reading" ? elements.vocabularyPageStatus : elements.speakingPageStatus;
+  const prevNode = listName === "reading" ? elements.vocabularyPrev : elements.speakingPrev;
+  const nextNode = listName === "reading" ? elements.vocabularyNext : elements.speakingNext;
+  const page = listName === "reading" ? readingPage : speakingPage;
+
+  const filtered = sortedWords(
+    state[listKey].filter((item) => {
+      const haystack = `${item.word} ${item.meaning} ${item.savedAt}`.toLowerCase();
+      return !searchInput.value.trim() || haystack.includes(searchInput.value.trim().toLowerCase());
+    }),
+    sortInput.value
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / listPageSize));
+  const safePage = Math.min(page, totalPages);
+  if (listName === "reading") readingPage = safePage;
+  else speakingPage = safePage;
+  const visible = filtered.slice((safePage - 1) * listPageSize, safePage * listPageSize);
+
+  liteList.innerHTML = visible
+    .map(
+      (item) => `
+        <div class="lite-word-row" data-word-select="${item.word}">
+          <strong>${item.word}</strong>
+          <button class="inline-audio-button" data-word-audio="${item.word}" aria-label="Play pronunciation for ${item.word}">&#128264;</button>
+        </div>
+      `
+    )
+    .join("");
+
+  fullPanel.innerHTML = visible
+    .map(
+      (item) => `
+        <article class="panel practice-target word-card-entry ${listName === "reading" ? "word-entry" : ""}" data-word-list="${listName}" data-word="${item.word}" data-word-select="${item.word}">
+          <div class="target-top">
+            <div>
+              <p class="eyebrow">${formatDateLabel(item.savedAt)}</p>
+              <h4>${item.word}</h4>
+            </div>
+            <button class="inline-audio-button" data-word-audio="${item.word}" aria-label="Play pronunciation for ${item.word}">&#128264;</button>
+          </div>
+          <p class="phonetic">${item.phonetic}</p>
+          <p class="meaning">${item.meaning}</p>
+          <p class="memory-line">${listName === "reading" ? "Reading" : "Speaking"} record: Right ${item.rightCount} / Wrong ${item.wrongCount}</p>
+          <p class="example">Example: "${item.example}"</p>
+          <div class="action-row">
+            <button class="ghost-button small-button" data-delete-word="${item.word}" data-delete-list="${listName}">Delete</button>
+            ${
+              listName === "speaking"
+                ? `<button class="primary-button small-button" data-practice-word="${item.word}">Practice</button>
+                   <button class="ghost-button small-button" data-judge-word="${item.word}">Judge</button>`
+                : ""
+            }
+          </div>
+        </article>
+      `
+    )
+    .join("");
+
+  pageNode.textContent = `Page ${safePage} of ${totalPages}`;
+  prevNode.disabled = safePage === 1;
+  nextNode.disabled = safePage === totalPages;
+}
+
+function ensureReadingQueue() {
+  if (!state.review.readingQueue.length) {
+    const count = parseInt(elements.readingReviewCount.value, 10) || 10;
+    state.review.readingQueue = state.readingList.slice(0, count).map((item) => item.word);
+    state.review.readingIndex = 0;
+    state.review.readingPending = null;
+  }
+}
+
+function getReadingReviewWord() {
+  ensureReadingQueue();
+  const word = state.review.readingQueue[state.review.readingIndex] || state.readingList[0]?.word;
+  return state.readingList.find((item) => item.word === word) || state.readingList[0];
+}
+
+function renderReadingReview() {
+  const item = getReadingReviewWord();
+  if (!item) return;
+  elements.readingReviewProgress.textContent = `Word ${state.review.readingIndex + 1} of ${state.review.readingQueue.length}`;
+  elements.readingReviewWord.textContent = item.word;
+  elements.readingReviewPhonetic.textContent = item.phonetic;
+  elements.readingReviewMeaning.textContent = item.meaning;
+  elements.readingReviewMemory.textContent = `Memory record: Remembered ${item.rightCount} times, forgot ${item.wrongCount} times.`;
+  elements.readingReviewMeaningPanel.classList.add("is-hidden");
+}
+
+function commitReadingPending() {
+  const item = getReadingReviewWord();
+  if (!item || !state.review.readingPending) return;
+  if (state.review.readingPending === "right") item.rightCount += 1;
+  else item.wrongCount += 1;
+  state.review.readingPending = null;
+  saveState();
+}
+
+function getSpeakingReviewWord() {
+  return state.speakingList[state.review.speakingIndex] || state.speakingList[0];
+}
+
+function renderSpeakingReview() {
+  const item = getSpeakingReviewWord();
+  if (!item) return;
+  elements.speakingReviewProgress.textContent = `Speaking word ${state.review.speakingIndex + 1} of ${state.speakingList.length}`;
+  elements.speakingReviewWord.textContent = item.word;
+  elements.speakingPhonetic.textContent = item.phonetic;
+  elements.speakingPhonetic.classList.add("is-hidden");
+  elements.speakingResult.textContent = state.review.speakingAttempt
+    ? `Latest attempt: "${state.review.speakingAttempt}". Press Let AI Judge to check it.`
+    : "Say the word, then let AI judge it.";
+  elements.speakingMemoryLine.textContent = `Speaking record: Right ${item.rightCount} times, wrong ${item.wrongCount} times.`;
+  elements.speakingMemoryLine.classList.add("is-hidden");
+  elements.speakingMeaning.textContent = `Meaning: ${item.meaning}.`;
+  elements.speakingExample.textContent = `Example: "${item.example}"`;
+}
+
+function renderAll() {
+  renderToday();
+  renderHistory();
+  renderWordList("reading");
+  renderWordList("speaking");
+  renderReadingReview();
+  renderSpeakingReview();
+}
+
+function startRecognition(mode) {
+  if (!SpeechRecognitionApi) {
+    if (mode === "today") {
+      state.transcript =
+        "I think this picture shows a busy market. Many people are walking around, and the street feels lively.";
+      elements.micStatus.textContent = "Demo transcript ready";
+      saveState();
+      renderToday();
+    } else {
+      const target = getSpeakingReviewWord();
+      state.review.speakingAttempt = target.word;
+      elements.speakingResult.textContent = `Latest attempt: "${target.word}". Press Let AI Judge to check it.`;
+    }
+    showToast("Speech recognition is not available here. Demo text was used.");
+    return;
+  }
+
+  if (activeRecognition) {
+    activeRecognition.stop();
+    return;
+  }
+
+  const recognition = new SpeechRecognitionApi();
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognitionMode = mode;
+  activeRecognition = recognition;
+
+  recognition.onstart = () => {
+    if (mode === "today") elements.micStatus.textContent = "Listening...";
+    else elements.speakingResult.textContent = "Listening for your pronunciation...";
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    if (mode === "today") {
+      state.transcript = transcript;
+      saveState();
+      renderToday();
+    } else {
+      state.review.speakingAttempt = transcript;
+      elements.speakingResult.textContent = `Latest attempt: "${transcript}". Press Let AI Judge to check it.`;
+    }
+  };
+
+  recognition.onerror = () => {
+    showToast("Microphone permission or speech recognition failed.");
+  };
+
+  recognition.onend = () => {
+    if (recognitionMode === "today") elements.micStatus.textContent = "Microphone ready";
+    activeRecognition = null;
+    recognitionMode = null;
+  };
+
+  recognition.start();
+}
+
+function judgeSpeakingWord(word) {
+  const item = state.speakingList.find((entry) => entry.word === word);
+  if (!item) return;
+  const attempt = normalized(state.review.speakingAttempt || "");
+  const target = normalized(word);
+  const correct = attempt === target || attempt.includes(target);
+  if (correct) item.rightCount += 1;
+  else item.wrongCount += 1;
+  saveState();
+  renderWordList("speaking");
+  renderSpeakingReview();
+  elements.speakingPhonetic.classList.remove("is-hidden");
+  elements.speakingMemoryLine.classList.remove("is-hidden");
+  elements.speakingResult.textContent = correct
+    ? `AI result: good pronunciation. Score 90/100.`
+    : `AI result: not clear enough yet. Score 58/100. Try the ending sound again.`;
+}
+
 document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll(".nav-link").forEach((item) => {
-      item.classList.remove("is-active");
-    });
-    document.querySelectorAll(".view").forEach((view) => {
-      view.classList.remove("is-visible");
-    });
+    document.querySelectorAll(".nav-link").forEach((item) => item.classList.remove("is-active"));
+    Object.values(elements.views).forEach((view) => view.classList.remove("is-visible"));
     button.classList.add("is-active");
-    views[button.dataset.view].classList.add("is-visible");
+    elements.views[button.dataset.view].classList.add("is-visible");
   });
 });
 
 document.querySelectorAll(".toggle-button").forEach((button) => {
   button.addEventListener("click", () => {
     if (button.dataset.reviewTab) {
-      document
-        .querySelectorAll("[data-review-tab]")
-        .forEach((item) => item.classList.remove("is-active"));
-      document
-        .querySelectorAll(".review-tab")
-        .forEach((tab) => tab.classList.remove("is-visible"));
-
+      document.querySelectorAll("[data-review-tab]").forEach((item) => item.classList.remove("is-active"));
+      document.querySelectorAll(".review-tab").forEach((tab) => tab.classList.remove("is-visible"));
       button.classList.add("is-active");
-      document
-        .getElementById(`review-tab-${button.dataset.reviewTab}`)
-        .classList.add("is-visible");
+      document.getElementById(`review-tab-${button.dataset.reviewTab}`).classList.add("is-visible");
       return;
     }
 
     if (button.dataset.wordMode) {
       const [group] = button.dataset.wordMode.split("-");
-      document
-        .querySelectorAll(`[data-word-mode^="${group}-"]`)
-        .forEach((item) => item.classList.remove("is-active"));
-      document
-        .querySelectorAll(`#${group}-lite-panel, #${group}-full-panel`)
-        .forEach((panel) => panel.classList.remove("is-visible"));
-
+      document.querySelectorAll(`[data-word-mode^="${group}-"]`).forEach((item) => item.classList.remove("is-active"));
+      document.querySelectorAll(`#${group}-lite-panel, #${group}-full-panel`).forEach((panel) => panel.classList.remove("is-visible"));
       button.classList.add("is-active");
-      document
-        .getElementById(`${button.dataset.wordMode}-panel`)
-        .classList.add("is-visible");
+      document.getElementById(`${button.dataset.wordMode}-panel`).classList.add("is-visible");
       return;
     }
 
     document.querySelectorAll(".toggle-button").forEach((item) => {
-      if (!item.dataset.wordMode) {
-        item.classList.remove("is-active");
-      }
+      if (!item.dataset.wordMode && !item.dataset.reviewTab) item.classList.remove("is-active");
     });
-    document.querySelectorAll(".model-copy").forEach((copy) => {
-      copy.classList.remove("is-visible");
-    });
-
+    document.querySelectorAll(".model-copy").forEach((copy) => copy.classList.remove("is-visible"));
     button.classList.add("is-active");
-    document
-      .getElementById(`model-${button.dataset.model}`)
-      .classList.add("is-visible");
+    document.getElementById(`model-${button.dataset.model}`).classList.add("is-visible");
   });
 });
 
-function openDrawer(word) {
-  const entry = wordLibrary[word];
-  if (!entry) return;
+document.addEventListener("click", (event) => {
+  const wordButton = event.target.closest("[data-word-select]");
+  if (wordButton) {
+    const word = wordButton.dataset.wordSelect;
+    setSelectedWord(word, wordButton);
+    const entry = wordLibrary[word];
+    if (entry) {
+      elements.drawerWord.textContent = word;
+      elements.drawerPhonetic.textContent = entry.phonetic;
+      elements.drawerMeaning.textContent = entry.meaning;
+      elements.drawerExample.textContent = `Example: "${entry.example}"`;
+      elements.drawer.dataset.word = word;
+      elements.drawer.classList.add("is-open");
+      elements.drawer.setAttribute("aria-hidden", "false");
+    }
+    return;
+  }
 
-  drawerWord.textContent = word;
-  drawerPhonetic.textContent = entry.phonetic;
-  drawerMeaning.textContent = entry.meaning;
-  drawerExample.textContent = entry.example;
-  drawer.classList.add("is-open");
-  drawer.setAttribute("aria-hidden", "false");
-  drawer.dataset.word = word;
-}
+  const audioButton = event.target.closest("[data-word-audio]");
+  if (audioButton) {
+    speakWord(audioButton.dataset.wordAudio);
+    return;
+  }
 
-document.querySelectorAll(".word-chip").forEach((chip) => {
-  chip.addEventListener("click", () => {
-    setSelectedWord(chip.dataset.word, chip);
-    openDrawer(chip.dataset.word);
-  });
-});
+  const deleteButton = event.target.closest("[data-delete-word]");
+  if (deleteButton) {
+    removeWordFromList(deleteButton.dataset.deleteWord, deleteButton.dataset.deleteList);
+    return;
+  }
 
-document.getElementById("close-drawer").addEventListener("click", () => {
-  drawer.classList.remove("is-open");
-  drawer.setAttribute("aria-hidden", "true");
+  const practiceButton = event.target.closest("[data-practice-word]");
+  if (practiceButton) {
+    state.review.speakingIndex = state.speakingList.findIndex(
+      (item) => item.word === practiceButton.dataset.practiceWord
+    );
+    saveState();
+    renderSpeakingReview();
+    showToast(`Practice "${practiceButton.dataset.practiceWord}"`);
+    return;
+  }
+
+  const judgeButton = event.target.closest("[data-judge-word]");
+  if (judgeButton) {
+    const word = judgeButton.dataset.judgeWord;
+    state.review.speakingIndex = state.speakingList.findIndex((item) => item.word === word);
+    state.review.speakingAttempt = word;
+    judgeSpeakingWord(word);
+    return;
+  }
 });
 
 document.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
-
-  if (key === "r" && selectedWord) {
-    showShortcutToast(`Saved "${selectedWord}" to Reading`);
-    return;
-  }
-
-  if (key === "s" && selectedWord) {
-    showShortcutToast(`Saved "${selectedWord}" to Speaking`);
-    return;
-  }
+  if (key === "r" && selectedWord) saveWordToList(selectedWord, "reading");
+  if (key === "s" && selectedWord) saveWordToList(selectedWord, "speaking");
 });
 
-document.getElementById("add-vocabulary").addEventListener("click", () => {
-  const button = document.getElementById("add-vocabulary");
-  const word = drawer.dataset.word;
-  if (!word) return;
-  button.textContent = `Saved "${word}"`;
-  setTimeout(() => {
-    button.textContent = "Add to Vocabulary";
-  }, 1200);
+elements.recordButton.addEventListener("click", () => startRecognition("today"));
+elements.retryButton.addEventListener("click", () => {
+  state.transcript = "";
+  state.feedback = analyzeTranscript("");
+  saveState();
+  renderToday();
 });
-
-document.getElementById("add-speaking").addEventListener("click", () => {
-  const button = document.getElementById("add-speaking");
-  const word = drawer.dataset.word;
-  if (!word) return;
-  button.textContent = `Saved "${word}"`;
-  setTimeout(() => {
-    button.textContent = "Add to Speaking List";
-  }, 1200);
-});
-
-document.getElementById("play-audio").addEventListener("click", () => {
-  const button = document.getElementById("play-audio");
-  button.textContent = "Playing...";
-  setTimeout(() => {
-    button.textContent = "Play Sound";
-  }, 900);
-});
-
-document.querySelectorAll("[data-word-audio]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const original = button.innerHTML;
-    button.innerHTML = "&#10003;";
-    setTimeout(() => {
-      button.innerHTML = original;
-    }, 900);
+elements.submitButton.addEventListener("click", () => {
+  state.feedback = analyzeTranscript(state.transcript);
+  state.history.unshift({
+    id: `hist-${Date.now()}`,
+    date: todayPrompt.date,
+    title: "Street market practice",
+    summary: state.feedback.correctedTranscript,
+    image: todayPrompt.image,
   });
+  saveState();
+  renderAll();
+  showToast("Practice saved to History");
 });
 
-function setSelectedWord(word, element) {
-  if (selectedWordElement) {
-    selectedWordElement.classList.remove("is-selected");
-  }
-
-  selectedWord = word;
-  selectedWordElement = element;
-  selectedWordElement.classList.add("is-selected");
-}
-
-function showShortcutToast(message) {
-  shortcutToast.textContent = message;
-  shortcutToast.classList.add("is-visible");
-
-  setTimeout(() => {
-    shortcutToast.classList.remove("is-visible");
-  }, 1200);
-}
-
-document
-  .querySelectorAll(".lite-word-row, .practice-target, .word-entry")
-  .forEach((item) => {
-    const source =
-      item.dataset.word ||
-      item.querySelector("strong, h4, .word-title span")?.textContent?.trim();
-
-    if (!source) return;
-
-    item.addEventListener("click", (event) => {
-      if (event.target.closest("button")) return;
-      setSelectedWord(source, item);
-    });
-  });
-
-function getMonthLabel(month) {
-  if (month === "all") return "All Months";
-
-  const [year, number] = month.split("-");
-  const labels = {
-    "01": "January",
-    "02": "February",
-    "03": "March",
-    "04": "April",
-    "05": "May",
-    "06": "June",
-    "07": "July",
-    "08": "August",
-    "09": "September",
-    "10": "October",
-    "11": "November",
-    "12": "December",
-  };
-
-  return `${labels[number]} ${year}`;
-}
-
-function getFilteredHistoryCards() {
-  const query = historySearch.value.trim().toLowerCase();
-  const selectedDate = historyDate.value;
-
-  return historyCards.filter((card) => {
-    const matchesMonth =
-      currentMonth === "all" || card.dataset.month === currentMonth;
-    const matchesSearch =
-      !query || card.dataset.search.toLowerCase().includes(query);
-    const matchesDate = !selectedDate || card.dataset.date === selectedDate;
-
-    return matchesMonth && matchesSearch && matchesDate;
-  });
-}
-
-function renderHistory() {
-  const filtered = getFilteredHistoryCards();
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  currentPage = Math.min(currentPage, totalPages);
-
-  historyCards.forEach((card) => {
-    card.classList.add("is-hidden");
-  });
-
-  filtered
-    .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-    .forEach((card) => {
-      card.classList.remove("is-hidden");
-    });
-
-  historyPageStatus.textContent = `Page ${currentPage} of ${totalPages}`;
-  historyPrev.disabled = currentPage === 1;
-  historyNext.disabled = currentPage === totalPages;
-  monthSummaryTitle.textContent = getMonthLabel(currentMonth);
-  monthSessionCount.textContent = `${filtered.length} session${
-    filtered.length === 1 ? "" : "s"
-  }`;
-}
-
-historySearch.addEventListener("input", () => {
-  currentPage = 1;
+elements.historySearch.addEventListener("input", () => {
+  historyPage = 1;
   renderHistory();
 });
-
-historyDate.addEventListener("change", () => {
-  currentPage = 1;
+elements.historyDate.addEventListener("change", () => {
+  historyPage = 1;
   renderHistory();
 });
-
-monthButtons.forEach((button) => {
+elements.monthButtons.forEach((button) =>
   button.addEventListener("click", () => {
     currentMonth = button.dataset.month;
-    currentPage = 1;
-    monthButtons.forEach((item) => {
-      item.classList.toggle("is-active", item === button);
-    });
+    historyPage = 1;
+    elements.monthButtons.forEach((item) => item.classList.toggle("is-active", item === button));
     renderHistory();
-  });
-});
-
-historyPrev.addEventListener("click", () => {
-  if (currentPage > 1) {
-    currentPage -= 1;
-    renderHistory();
-  }
-});
-
-historyNext.addEventListener("click", () => {
-  currentPage += 1;
+  })
+);
+elements.historyPrev.addEventListener("click", () => {
+  if (historyPage > 1) historyPage -= 1;
   renderHistory();
 });
-
-document.getElementById("open-months").addEventListener("click", () => {
-  document.getElementById("month-strip").scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
+elements.historyNext.addEventListener("click", () => {
+  historyPage += 1;
+  renderHistory();
 });
-
+document.getElementById("open-months").addEventListener("click", () => {
+  document.getElementById("month-strip").scrollIntoView({ behavior: "smooth", block: "center" });
+});
 document.getElementById("jump-today-history").addEventListener("click", () => {
   currentMonth = "all";
-  currentPage = 1;
-  historySearch.value = "";
-  historyDate.value = "";
-  monthButtons.forEach((item) => {
-    item.classList.toggle("is-active", item.dataset.month === "all");
-  });
+  historyPage = 1;
+  elements.historySearch.value = "";
+  elements.historyDate.value = "";
+  elements.monthButtons.forEach((item) => item.classList.toggle("is-active", item.dataset.month === "all"));
   renderHistory();
 });
 
-renderHistory();
-
-function sortEntries(entries, mode) {
-  return [...entries].sort((a, b) => {
-    if (mode === "az") {
-      return a.dataset.word.localeCompare(b.dataset.word);
-    }
-
-    if (mode === "oldest") {
-      return a.dataset.date.localeCompare(b.dataset.date);
-    }
-
-    return b.dataset.date.localeCompare(a.dataset.date);
-  });
-}
-
-function renderManagedList(config) {
-  const {
-    entries,
-    searchInput,
-    sortInput,
-    page,
-    size,
-    prevButton,
-    nextButton,
-    statusNode,
-  } = config;
-
-  const query = searchInput.value.trim().toLowerCase();
-  const filtered = sortEntries(
-    entries.filter((entry) => {
-      const searchBase = `${entry.dataset.word} ${entry.dataset.meaning} ${entry.dataset.date}`;
-      return !query || searchBase.toLowerCase().includes(query);
-    }),
-    sortInput.value
-  );
-
-  entries.forEach((entry) => {
-    entry.classList.add("is-hidden");
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / size));
-  const safePage = Math.min(page, totalPages);
-
-  filtered
-    .slice((safePage - 1) * size, safePage * size)
-    .forEach((entry) => entry.classList.remove("is-hidden"));
-
-  statusNode.textContent = `Page ${safePage} of ${totalPages}`;
-  prevButton.disabled = safePage === 1;
-  nextButton.disabled = safePage === totalPages;
-
-  return safePage;
-}
-
-function renderVocabularyList() {
-  vocabularyPage = renderManagedList({
-    entries: vocabularyEntries,
-    searchInput: vocabularySearch,
-    sortInput: vocabularySort,
-    page: vocabularyPage,
-    size: vocabularyPageSize,
-    prevButton: vocabularyPrev,
-    nextButton: vocabularyNext,
-    statusNode: vocabularyPageStatus,
-  });
-}
-
-function renderSpeakingList() {
-  speakingPage = renderManagedList({
-    entries: speakingEntries,
-    searchInput: speakingSearch,
-    sortInput: speakingSort,
-    page: speakingPage,
-    size: speakingPageSize,
-    prevButton: speakingPrev,
-    nextButton: speakingNext,
-    statusNode: speakingPageStatus,
-  });
-}
-
-vocabularySearch.addEventListener("input", () => {
-  vocabularyPage = 1;
-  renderVocabularyList();
+elements.vocabularySearch.addEventListener("input", () => {
+  readingPage = 1;
+  renderWordList("reading");
+});
+elements.vocabularySort.addEventListener("change", () => {
+  readingPage = 1;
+  renderWordList("reading");
+});
+elements.vocabularyPrev.addEventListener("click", () => {
+  if (readingPage > 1) readingPage -= 1;
+  renderWordList("reading");
+});
+elements.vocabularyNext.addEventListener("click", () => {
+  readingPage += 1;
+  renderWordList("reading");
 });
 
-vocabularySort.addEventListener("change", () => {
-  vocabularyPage = 1;
-  renderVocabularyList();
-});
-
-vocabularyPrev.addEventListener("click", () => {
-  if (vocabularyPage > 1) {
-    vocabularyPage -= 1;
-    renderVocabularyList();
-  }
-});
-
-vocabularyNext.addEventListener("click", () => {
-  vocabularyPage += 1;
-  renderVocabularyList();
-});
-
-speakingSearch.addEventListener("input", () => {
+elements.speakingSearch.addEventListener("input", () => {
   speakingPage = 1;
-  renderSpeakingList();
+  renderWordList("speaking");
 });
-
-speakingSort.addEventListener("change", () => {
+elements.speakingSort.addEventListener("change", () => {
   speakingPage = 1;
-  renderSpeakingList();
+  renderWordList("speaking");
 });
-
-speakingPrev.addEventListener("click", () => {
-  if (speakingPage > 1) {
-    speakingPage -= 1;
-    renderSpeakingList();
-  }
+elements.speakingPrev.addEventListener("click", () => {
+  if (speakingPage > 1) speakingPage -= 1;
+  renderWordList("speaking");
 });
-
-speakingNext.addEventListener("click", () => {
+elements.speakingNext.addEventListener("click", () => {
   speakingPage += 1;
-  renderSpeakingList();
+  renderWordList("speaking");
 });
 
-renderVocabularyList();
-renderSpeakingList();
-
-reviewYes.addEventListener("click", () => {
-  reviewMeaningPanel.classList.remove("is-hidden");
+elements.startReadingReview.addEventListener("click", () => {
+  const count = parseInt(elements.readingReviewCount.value, 10) || 10;
+  state.review.readingQueue = state.readingList.slice(0, count).map((item) => item.word);
+  state.review.readingIndex = 0;
+  state.review.readingPending = null;
+  saveState();
+  renderReadingReview();
+});
+elements.reviewYes.addEventListener("click", () => {
+  state.review.readingPending = "right";
+  elements.readingReviewMeaningPanel.classList.remove("is-hidden");
+});
+elements.reviewNo.addEventListener("click", () => {
+  state.review.readingPending = "wrong";
+  elements.readingReviewMeaningPanel.classList.remove("is-hidden");
+});
+elements.readingReviewWrong.addEventListener("click", () => {
+  state.review.readingPending = "wrong";
+  elements.readingReviewMeaningPanel.classList.remove("is-hidden");
+});
+elements.readingReviewPrev.addEventListener("click", () => {
+  if (state.review.readingIndex > 0) state.review.readingIndex -= 1;
+  renderReadingReview();
+});
+elements.readingReviewNext.addEventListener("click", () => {
+  commitReadingPending();
+  if (state.review.readingIndex < state.review.readingQueue.length - 1) state.review.readingIndex += 1;
+  renderReadingReview();
+});
+elements.readingReviewAudio.addEventListener("click", () => {
+  const item = getReadingReviewWord();
+  if (item) speakWord(item.word);
 });
 
-reviewNo.addEventListener("click", () => {
-  reviewMeaningPanel.classList.remove("is-hidden");
+elements.startSpeakingReview.addEventListener("click", () => startRecognition("speaking-review"));
+elements.runAiJudge.addEventListener("click", () => {
+  const item = getSpeakingReviewWord();
+  if (!item) return;
+  judgeSpeakingWord(item.word);
+});
+elements.speakingReviewPrev.addEventListener("click", () => {
+  if (state.review.speakingIndex > 0) state.review.speakingIndex -= 1;
+  state.review.speakingAttempt = "";
+  renderSpeakingReview();
+});
+elements.speakingReviewNext.addEventListener("click", () => {
+  if (state.review.speakingIndex < state.speakingList.length - 1) state.review.speakingIndex += 1;
+  state.review.speakingAttempt = "";
+  renderSpeakingReview();
+});
+elements.speakingReviewAudio.addEventListener("click", () => {
+  const item = getSpeakingReviewWord();
+  if (item) speakWord(item.word);
 });
 
-runAiJudge.addEventListener("click", () => {
-  runAiJudge.textContent = "AI Judging...";
-
-  setTimeout(() => {
-    runAiJudge.textContent = "Let AI Judge";
-    speakingPhonetic.classList.remove("is-hidden");
-    speakingMemoryLine.classList.remove("is-hidden");
-  }, 900);
+elements.closeDrawer.addEventListener("click", () => {
+  elements.drawer.classList.remove("is-open");
+  elements.drawer.setAttribute("aria-hidden", "true");
 });
+elements.playAudio.addEventListener("click", () => speakWord(elements.drawer.dataset.word));
+elements.addReading.addEventListener("click", () => {
+  if (elements.drawer.dataset.word) saveWordToList(elements.drawer.dataset.word, "reading");
+});
+elements.addSpeaking.addEventListener("click", () => {
+  if (elements.drawer.dataset.word) saveWordToList(elements.drawer.dataset.word, "speaking");
+});
+
+renderAll();
