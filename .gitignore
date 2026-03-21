@@ -2,5 +2,6 @@ node_modules
 dist
 .DS_Store
 .env
+.venv
 data/*.sqlite-shm
 data/*.sqlite-wal

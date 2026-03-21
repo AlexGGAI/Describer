@@ -395,6 +395,15 @@ function updateTodayRecordingControls() {
   elements.submitButton.disabled = isTodayRecording;
 }
 
+function collectRecognitionTranscript(event) {
+  return Array.from(event.results || [])
+    .map((result) => result?.[0]?.transcript?.trim() || "")
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function saveWordToList(word, listName) {
   const listKey = listName === "reading" ? "readingList" : "speakingList";
   try {
@@ -737,7 +746,8 @@ function startRecognition(mode) {
 
   const recognition = new SpeechRecognitionApi();
   recognition.lang = "en-US";
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
   recognitionMode = mode;
   activeRecognition = recognition;
@@ -749,7 +759,7 @@ function startRecognition(mode) {
 
   recognition.onresult = (event) => {
     micPermissionGranted = true;
-    const transcript = event.results[0][0].transcript;
+    const transcript = collectRecognitionTranscript(event);
     if (mode === "today") {
       state.transcript = transcript;
       saveState();
@@ -769,11 +779,17 @@ function startRecognition(mode) {
     activeRecognition = null;
     recognitionMode = null;
     if (endedMode === "today" && !isTodayRecording) {
-      elements.micStatus.textContent = state.transcript.trim()
-        ? "Ready to submit"
-        : dailyAudioBlob
+      if (state.transcript.trim()) {
+        elements.micStatus.textContent = "Ready to submit";
+      } else if (dailyAudioBlob) {
+        elements.micStatus.textContent = SpeechRecognitionApi
           ? "Recording saved"
-          : "Microphone ready";
+          : "Speech recognition unsupported";
+        elements.transcriptText.textContent =
+          "No browser transcript was captured, but your recording is saved. You can still click Submit to AI.";
+      } else {
+        elements.micStatus.textContent = "Microphone ready";
+      }
     }
   };
 
@@ -895,6 +911,10 @@ function finishCapture(mode) {
       : dailyAudioBlob
         ? "Recording saved"
         : "Microphone ready";
+    if (!state.transcript.trim() && dailyAudioBlob) {
+      elements.transcriptText.textContent =
+        "Your recording is saved. If no transcript appears, click Submit to AI and the backend will transcribe it.";
+    }
   } else {
     elements.startSpeakingReview.textContent = "Record Again";
     elements.speakingResult.textContent = state.review.speakingAttempt
@@ -942,6 +962,7 @@ async function analyzeWithBackend() {
   formData.append("promptTitle", todayPrompt.title);
   formData.append("transcript", state.transcript || "");
   formData.append("imageUrl", todayPrompt.image || "");
+  if (dailyAudioBlob) formData.append("audio", dailyAudioBlob, "today.webm");
 
   const response = await fetch("/api/analyze", {
     method: "POST",
@@ -959,7 +980,7 @@ async function judgeSpeakingWord(word) {
   const item = state.speakingList.find((entry) => entry.word === word);
   if (!item) return;
 
-  if (!state.review.speakingAttempt.trim()) {
+  if (!state.review.speakingAttempt.trim() && !speakingAudioBlob) {
     elements.speakingResult.textContent = "Say the word first, then let AI judge it.";
     showToast("Please say the word first.");
     return;
@@ -970,6 +991,7 @@ async function judgeSpeakingWord(word) {
       const formData = new FormData();
       formData.append("targetWord", word);
       formData.append("attempt", state.review.speakingAttempt || "");
+      if (speakingAudioBlob) formData.append("audio", speakingAudioBlob, "speaking.webm");
       const response = await fetch("/api/judge-word", {
         method: "POST",
         body: formData,
@@ -1155,8 +1177,8 @@ elements.submitButton.addEventListener("click", async () => {
     return;
   }
 
-  if (!state.transcript.trim()) {
-    showToast("Please speak first so Claude has a transcript to analyze.");
+  if (!state.transcript.trim() && !dailyAudioBlob) {
+    showToast("Please speak first so Claude can analyze your recording.");
     return;
   }
 
@@ -1339,7 +1361,7 @@ elements.runAiJudge.addEventListener("click", async () => {
   const item = getSpeakingReviewWord();
   if (!item) return;
   if (!apiConfigured && speakingAudioBlob && !state.review.speakingAttempt) {
-    showToast("Mic works, but Claude speaking judge needs browser transcript text first.");
+    showToast("AI is not configured yet.");
     return;
   }
   await judgeSpeakingWord(item.word);

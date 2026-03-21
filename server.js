@@ -2,7 +2,11 @@ import "dotenv/config";
 import express from "express";
 import multer from "multer";
 import Anthropic from "@anthropic-ai/sdk";
+import fs from "fs/promises";
+import os from "os";
 import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { fileURLToPath } from "url";
 import {
   addHistoryEntry,
@@ -14,9 +18,15 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const execFileAsync = promisify(execFile);
+const uploadDir = path.join(os.tmpdir(), "describer-uploads");
+const localPython =
+  process.env.LOCAL_TRANSCRIBE_PYTHON || path.join(__dirname, ".venv", "bin", "python3");
+const localTranscribeModel = process.env.LOCAL_TRANSCRIBE_MODEL || "tiny.en";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+await fs.mkdir(uploadDir, { recursive: true });
+const upload = multer({ dest: uploadDir });
 const port = Number(process.env.PORT || 4173);
 const textModel =
   process.env.ANTHROPIC_TEXT_MODEL || "claude-sonnet-4-20250514";
@@ -42,7 +52,7 @@ app.get("/api/health", (_req, res) => {
     configured: Boolean(anthropic),
     provider: "anthropic",
     textModel,
-    transcription: "browser-only",
+    transcription: "browser-or-local",
   });
 });
 
@@ -94,7 +104,7 @@ app.post("/api/history", (req, res) => {
   res.json({ history });
 });
 
-app.post("/api/analyze", upload.none(), async (req, res) => {
+app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   try {
     if (!anthropic) {
       return res.status(503).json({
@@ -103,12 +113,12 @@ app.post("/api/analyze", upload.none(), async (req, res) => {
     }
 
     const promptTitle = req.body.promptTitle || "Describe the picture.";
-    const transcript = (req.body.transcript || "").trim();
+    const transcript = await resolveTranscript(req);
     const imageUrl = req.body.imageUrl || "";
 
     if (!transcript) {
       return res.status(400).json({
-        error: "No transcript was provided. Claude mode needs browser transcript input.",
+        error: "No transcript was provided and the recording could not be transcribed.",
       });
     }
 
@@ -163,10 +173,12 @@ app.post("/api/analyze", upload.none(), async (req, res) => {
   } catch (error) {
     console.error("/api/analyze failed", error);
     res.status(500).json({ error: "Failed to analyze speech with Claude." });
+  } finally {
+    await cleanupUploadedFile(req.file);
   }
 });
 
-app.post("/api/judge-word", upload.none(), async (req, res) => {
+app.post("/api/judge-word", upload.single("audio"), async (req, res) => {
   try {
     if (!anthropic) {
       return res.status(503).json({
@@ -175,7 +187,7 @@ app.post("/api/judge-word", upload.none(), async (req, res) => {
     }
 
     const targetWord = (req.body.targetWord || "").trim();
-    const heard = (req.body.attempt || "").trim();
+    const heard = await resolveTranscript(req);
 
     if (!targetWord) {
       return res.status(400).json({ error: "targetWord is required." });
@@ -183,7 +195,7 @@ app.post("/api/judge-word", upload.none(), async (req, res) => {
 
     if (!heard) {
       return res.status(400).json({
-        error: "No spoken transcript was provided. Claude mode needs browser speech recognition first.",
+        error: "No spoken transcript was provided and the recording could not be transcribed.",
       });
     }
 
@@ -238,6 +250,8 @@ app.post("/api/judge-word", upload.none(), async (req, res) => {
   } catch (error) {
     console.error("/api/judge-word failed", error);
     res.status(500).json({ error: "Failed to judge pronunciation with Claude." });
+  } finally {
+    await cleanupUploadedFile(req.file);
   }
 });
 
@@ -303,6 +317,36 @@ function clamp(value, min, max) {
 
 function formatIsoDate(date) {
   return date.toISOString().slice(0, 10);
+}
+
+async function resolveTranscript(req) {
+  const directTranscript = (req.body.transcript || req.body.attempt || "").trim();
+  if (directTranscript) return directTranscript;
+  if (!req.file?.path) return "";
+  return transcribeAudioFile(req.file.path);
+}
+
+async function transcribeAudioFile(filePath) {
+  try {
+    const { stdout } = await execFileAsync(localPython, [
+      path.join(__dirname, "scripts", "transcribe_audio.py"),
+      filePath,
+      "--model",
+      localTranscribeModel,
+    ]);
+    const parsed = safeJson(stdout);
+    return typeof parsed.text === "string" ? parsed.text.trim() : "";
+  } catch (error) {
+    console.error("transcribeAudioFile failed", error);
+    return "";
+  }
+}
+
+async function cleanupUploadedFile(file) {
+  if (!file?.path) return;
+  try {
+    await fs.unlink(file.path);
+  } catch {}
 }
 
 async function lookupWordDetails(word) {
