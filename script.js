@@ -164,6 +164,7 @@ let recordingMode = null;
 let dailyAudioBlob = null;
 let speakingAudioBlob = null;
 let micPermissionGranted = false;
+let isTodayRecording = false;
 
 const elements = {
   views: {
@@ -177,7 +178,8 @@ const elements = {
   dailyImage: document.getElementById("daily-image"),
   dailyPromptTitle: document.getElementById("daily-prompt-title"),
   micStatus: document.getElementById("mic-status"),
-  recordButton: document.getElementById("record-button"),
+  startSpeakingButton: document.getElementById("start-speaking-button"),
+  finishSpeakingButton: document.getElementById("finish-speaking-button"),
   transcriptText: document.getElementById("transcript-text"),
   testMicButton: document.getElementById("test-mic-button"),
   micTestResult: document.getElementById("mic-test-result"),
@@ -387,6 +389,12 @@ function speakWord(word) {
   synth.speak(utterance);
 }
 
+function updateTodayRecordingControls() {
+  elements.startSpeakingButton.disabled = isTodayRecording;
+  elements.finishSpeakingButton.disabled = !isTodayRecording;
+  elements.submitButton.disabled = isTodayRecording;
+}
+
 async function saveWordToList(word, listName) {
   const listKey = listName === "reading" ? "readingList" : "speakingList";
   try {
@@ -449,17 +457,19 @@ function renderToday() {
   elements.dailyPromptTitle.textContent = todayPrompt.title;
   elements.transcriptText.textContent =
     state.transcript || "Tap Speak to start describing the picture.";
-  elements.micStatus.textContent = dailyAudioBlob
-    ? apiConfigured
-      ? "Recording ready"
-      : "Mic ready, AI off"
-    : micPermissionGranted
-      ? apiConfigured
-        ? "Ready to record"
-        : "Mic on, local only"
-      : apiConfigured
-        ? "Ready to record"
-        : "Need mic access";
+  elements.micStatus.textContent = isTodayRecording
+    ? "Recording..."
+    : dailyAudioBlob
+      ? state.transcript.trim()
+        ? "Ready to submit"
+        : "Recording saved"
+      : micPermissionGranted
+        ? apiConfigured
+          ? "Ready to record"
+          : "Mic on, local only"
+        : apiConfigured
+          ? "Ready to record"
+          : "Need mic access";
   elements.micTestResult.textContent = micPermissionGranted
     ? SpeechRecognitionApi
       ? apiConfigured
@@ -516,6 +526,8 @@ function renderToday() {
       `
     )
     .join("");
+
+  updateTodayRecordingControls();
 }
 
 function renderHistory() {
@@ -715,12 +727,12 @@ function startRecognition(mode) {
         "Microphone works, but this browser does not support speech recognition.";
     }
     showToast("Dia may allow the mic, but browser speech recognition is not available here.");
-    return;
+    return false;
   }
 
   if (activeRecognition) {
+    if (recognitionMode === mode) return true;
     activeRecognition.stop();
-    return;
   }
 
   const recognition = new SpeechRecognitionApi();
@@ -753,22 +765,45 @@ function startRecognition(mode) {
   };
 
   recognition.onend = () => {
-    if (recognitionMode === "today") elements.micStatus.textContent = "Microphone ready";
+    const endedMode = recognitionMode;
     activeRecognition = null;
     recognitionMode = null;
+    if (endedMode === "today" && !isTodayRecording) {
+      elements.micStatus.textContent = state.transcript.trim()
+        ? "Ready to submit"
+        : dailyAudioBlob
+          ? "Recording saved"
+          : "Microphone ready";
+    }
   };
 
   recognition.start();
+  return true;
 }
 
 async function captureAudio(mode) {
-  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-    startRecognition(mode);
+  if (mediaRecorder || activeRecognition) {
+    showToast("Finish the current recording first.");
     return;
   }
 
-  if (mediaRecorder && recordingMode === mode) {
-    mediaRecorder.stop();
+  if (mode === "today") {
+    isTodayRecording = true;
+    dailyAudioBlob = null;
+    state.transcript = "";
+    renderToday();
+  } else {
+    speakingAudioBlob = null;
+    state.review.speakingAttempt = "";
+    renderSpeakingReview();
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    const started = startRecognition(mode);
+    if (!started && mode === "today") {
+      isTodayRecording = false;
+      updateTodayRecordingControls();
+    }
     return;
   }
 
@@ -779,6 +814,8 @@ async function captureAudio(mode) {
   } catch {
     showToast("Microphone permission was denied.");
     if (mode === "today") {
+      isTodayRecording = false;
+      updateTodayRecordingControls();
       elements.micStatus.textContent = "Microphone blocked";
     } else {
       elements.speakingResult.textContent = "Microphone blocked.";
@@ -806,13 +843,11 @@ async function captureAudio(mode) {
     const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
     if (mode === "today") {
       dailyAudioBlob = blob;
-      elements.micStatus.textContent = apiConfigured
-        ? "Recording ready"
-        : "Mic recorded, AI off";
-      if (!apiConfigured && SpeechRecognitionApi) {
-        startRecognition("today");
-      } else if (!apiConfigured) {
-        showToast("Mic is working. Add API key or use a browser with speech recognition for transcript.");
+      elements.micStatus.textContent = state.transcript.trim()
+        ? "Ready to submit"
+        : "Recording saved";
+      if (!state.transcript.trim() && !SpeechRecognitionApi) {
+        showToast("Recording saved, but this browser still needs speech recognition for Claude analysis.");
       }
     } else {
       speakingAudioBlob = blob;
@@ -820,17 +855,52 @@ async function captureAudio(mode) {
         ? "Recording ready. Press Let AI Judge."
         : "Recording ready, but AI is not configured.";
       elements.startSpeakingReview.textContent = "Record Again";
-      if (!apiConfigured && SpeechRecognitionApi) {
-        startRecognition("speaking-review");
-      }
     }
 
     stream.getTracks().forEach((track) => track.stop());
     mediaRecorder = null;
     recordingMode = null;
+    if (mode === "today") {
+      isTodayRecording = false;
+      updateTodayRecordingControls();
+    }
   };
 
   mediaRecorder.start();
+  startRecognition(mode);
+}
+
+function finishCapture(mode) {
+  if (mode === "today") {
+    if (!isTodayRecording && recordingMode !== "today" && recognitionMode !== "today") {
+      showToast("Start speaking first.");
+      return;
+    }
+    isTodayRecording = false;
+    updateTodayRecordingControls();
+  }
+
+  if (activeRecognition && recognitionMode === mode) {
+    activeRecognition.stop();
+  }
+
+  if (mediaRecorder && recordingMode === mode) {
+    mediaRecorder.stop();
+    return;
+  }
+
+  if (mode === "today") {
+    elements.micStatus.textContent = state.transcript.trim()
+      ? "Ready to submit"
+      : dailyAudioBlob
+        ? "Recording saved"
+        : "Microphone ready";
+  } else {
+    elements.startSpeakingReview.textContent = "Record Again";
+    elements.speakingResult.textContent = state.review.speakingAttempt
+      ? `Latest attempt: "${state.review.speakingAttempt}". Press Let AI Judge to check it.`
+      : "Recording finished. Press Let AI Judge.";
+  }
 }
 
 async function testMicrophone() {
@@ -1066,9 +1136,13 @@ document.addEventListener("keydown", async (event) => {
   if (key === "s" && selectedWord) await saveWordToList(selectedWord, "speaking");
 });
 
-elements.recordButton.addEventListener("click", () => captureAudio("today"));
+elements.startSpeakingButton.addEventListener("click", () => captureAudio("today"));
+elements.finishSpeakingButton.addEventListener("click", () => finishCapture("today"));
 elements.testMicButton.addEventListener("click", () => testMicrophone());
 elements.retryButton.addEventListener("click", () => {
+  if (activeRecognition && recognitionMode === "today") activeRecognition.stop();
+  if (mediaRecorder && recordingMode === "today") mediaRecorder.stop();
+  isTodayRecording = false;
   state.transcript = "";
   dailyAudioBlob = null;
   state.feedback = analyzeTranscript("");
@@ -1076,6 +1150,11 @@ elements.retryButton.addEventListener("click", () => {
   renderToday();
 });
 elements.submitButton.addEventListener("click", async () => {
+  if (isTodayRecording) {
+    showToast("Finish speaking first, then submit to AI.");
+    return;
+  }
+
   if (!state.transcript.trim()) {
     showToast("Please speak first so Claude has a transcript to analyze.");
     return;
@@ -1245,7 +1324,17 @@ elements.readingReviewAudio.addEventListener("click", () => {
   if (item) speakWord(item.word);
 });
 
-elements.startSpeakingReview.addEventListener("click", () => captureAudio("speaking-review"));
+elements.startSpeakingReview.addEventListener("click", () => {
+  if (mediaRecorder && recordingMode === "speaking-review") {
+    finishCapture("speaking-review");
+    return;
+  }
+  if (activeRecognition && recognitionMode === "speaking-review") {
+    finishCapture("speaking-review");
+    return;
+  }
+  captureAudio("speaking-review");
+});
 elements.runAiJudge.addEventListener("click", async () => {
   const item = getSpeakingReviewWord();
   if (!item) return;
