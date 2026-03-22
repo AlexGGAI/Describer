@@ -3,5 +3,6 @@ dist
 .DS_Store
 .env
 .venv
+local-archive/
 data/*.sqlite-shm
 data/*.sqlite-wal

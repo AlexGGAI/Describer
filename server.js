@@ -301,7 +301,7 @@ app.use((_req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Describer running on http://localhost:${port}`);
+  console.log(`V1.0 running on http://localhost:${port}`);
 });
 
 function safeJson(text) {

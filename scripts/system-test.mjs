@@ -30,7 +30,7 @@ async function testHomePage() {
   const response = await fetch(baseUrl);
   assert(response.ok, "Home page should load.");
   const html = await response.text();
-  assert(html.includes("Describer"), "Home page should include app title.");
+  assert(html.includes("V1.0"), "Home page should include app title.");
 }
 
 async function testHealth() {
