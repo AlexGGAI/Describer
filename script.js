@@ -231,6 +231,7 @@ const elements = {
   historySearch: document.getElementById("history-search"),
   historyDate: document.getElementById("history-date"),
   selectAllHistoryButton: document.getElementById("select-all-history"),
+  exportHistoryButton: document.getElementById("export-history"),
   historyAllButton: document.getElementById("history-all-button"),
   historyMonthModeButton: document.getElementById("history-month-mode"),
   historyDateModeButton: document.getElementById("history-date-mode"),
@@ -247,6 +248,7 @@ const elements = {
   vocabularySearch: document.getElementById("vocabulary-search"),
   vocabularySort: document.getElementById("vocabulary-sort"),
   selectAllReadingButton: document.getElementById("select-all-reading"),
+  exportReadingButton: document.getElementById("export-reading"),
   deleteSelectedReadingButton: document.getElementById("delete-selected-reading"),
   vocabularyLiteList: document.getElementById("vocabulary-lite-list"),
   vocabularyFullPanel: document.getElementById("vocabulary-full-panel"),
@@ -256,6 +258,7 @@ const elements = {
   speakingSearch: document.getElementById("speaking-search"),
   speakingSort: document.getElementById("speaking-sort"),
   selectAllSpeakingButton: document.getElementById("select-all-speaking"),
+  exportSpeakingButton: document.getElementById("export-speaking"),
   deleteSelectedSpeakingButton: document.getElementById("delete-selected-speaking"),
   speakingLiteList: document.getElementById("speaking-lite-list"),
   speakingFullPanel: document.getElementById("speaking-full-panel"),
@@ -464,8 +467,111 @@ function getCurrentFilteredWords(listName) {
   return listName === "reading" ? currentFilteredReadingWords : currentFilteredSpeakingWords;
 }
 
+function getFilteredHistoryEntries() {
+  const query = elements.historySearch.value.trim().toLowerCase();
+  const dateValue = elements.historyDate.value;
+  const monthKey = `${historyYear}-${historyMonth}`;
+
+  return state.history.filter((entry) => {
+    const haystack = `${entry.title} ${entry.summary} ${entry.date}`.toLowerCase();
+    const matchesSearch = !query || haystack.includes(query);
+    const matchesView =
+      historyFilterMode === "date" && dateValue
+        ? entry.date === dateValue
+        : historyFilterMode === "month"
+          ? entry.date.startsWith(monthKey)
+          : true;
+    return matchesSearch && matchesView;
+  });
+}
+
+function getFilteredWordEntries(listName) {
+  const listKey = getWordListKey(listName);
+  const searchInput =
+    listName === "reading" ? elements.vocabularySearch : elements.speakingSearch;
+  const sortInput = listName === "reading" ? elements.vocabularySort : elements.speakingSort;
+
+  return sortedWords(
+    state[listKey].filter((item) => {
+      const haystack = `${item.word} ${item.meaning} ${item.savedAt}`.toLowerCase();
+      return !searchInput.value.trim() || haystack.includes(searchInput.value.trim().toLowerCase());
+    }),
+    sortInput.value
+  );
+}
+
 function clearWordSelection(listName) {
   getSelectedWordSet(listName).clear();
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
+  return text;
+}
+
+function downloadCsv(filename, headers, rows) {
+  const csv = [
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((row) => row.map(escapeCsvCell).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportHistoryCsv() {
+  const entries = getFilteredHistoryEntries();
+  if (!entries.length) {
+    showToast("No history to export in this view.");
+    return;
+  }
+  downloadCsv(
+    `describer-history-${formatIsoDate(new Date())}.csv`,
+    [
+      "Date",
+      "Topic",
+      "Score",
+      "Original Transcript",
+      "Corrected Version",
+      "Easy Example",
+      "Advanced Example",
+    ],
+    entries.map((entry) => [
+      entry.date,
+      entry.title,
+      typeof entry.score === "number" ? entry.score : "",
+      entry.originalTranscript || "",
+      entry.correctedTranscript || "",
+      entry.easyExample || "",
+      entry.advancedExample || "",
+    ])
+  );
+  showToast(`Exported ${entries.length} history item${entries.length === 1 ? "" : "s"}.`);
+}
+
+function exportWordListCsv(listName) {
+  const entries = getFilteredWordEntries(listName);
+  if (!entries.length) {
+    showToast(`No ${getWordListLabel(listName).toLowerCase()} words to export.`);
+    return;
+  }
+  downloadCsv(
+    `describer-${listName}-${formatIsoDate(new Date())}.csv`,
+    ["Word", "Right", "Wrong"],
+    entries.map((item) => [item.word, item.rightCount, item.wrongCount])
+  );
+  showToast(
+    `Exported ${entries.length} ${getWordListLabel(listName).toLowerCase()} word${
+      entries.length === 1 ? "" : "s"
+    }.`
+  );
 }
 
 function getSelectedWords(listName) {
@@ -668,6 +774,8 @@ function buildHistoryTodayView(entry) {
       ...analyzeTranscript(transcript, prompt),
       correctedTranscript,
       overallScore: typeof entry.score === "number" ? entry.score : 89,
+      easy: entry.easyExample || "",
+      advanced: entry.advancedExample || "",
       overallSuggestion:
         entry.summary || "Review this saved practice and compare your original words with the corrected version.",
       keywords: prompt.keywords,
@@ -1418,21 +1526,8 @@ function renderToday() {
 
 function renderHistory() {
   renderHistoryFilterControls();
-  const query = elements.historySearch.value.trim().toLowerCase();
-  const dateValue = elements.historyDate.value;
-  const monthKey = `${historyYear}-${historyMonth}`;
   const historyPageSize = historyCardMode === "lite" ? 9 : pageSize;
-  const filtered = state.history.filter((entry) => {
-    const haystack = `${entry.title} ${entry.summary} ${entry.date}`.toLowerCase();
-    const matchesSearch = !query || haystack.includes(query);
-    const matchesView =
-      historyFilterMode === "date" && dateValue
-        ? entry.date === dateValue
-        : historyFilterMode === "month"
-          ? entry.date.startsWith(monthKey)
-          : true;
-    return matchesSearch && matchesView;
-  });
+  const filtered = getFilteredHistoryEntries();
   currentFilteredHistoryIds = filtered.map((entry) => entry.id);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / historyPageSize));
@@ -1548,6 +1643,7 @@ function renderHistory() {
   elements.selectAllHistoryButton.disabled = currentFilteredHistoryIds.length === 0;
   elements.selectAllHistoryButton.textContent = allFilteredSelected ? "Cancel" : "Select All";
   elements.selectAllHistoryButton.classList.toggle("is-active", allFilteredSelected);
+  elements.exportHistoryButton.disabled = filtered.length === 0;
   elements.deleteAllHistory.disabled = getSelectedHistoryIds().length === 0;
 }
 
@@ -1699,13 +1795,7 @@ function renderWordList(listName) {
   const listPageSize = activeMode === "lite" ? liteListPageSize : fullListPageSize;
   const selectedSet = getSelectedWordSet(listName);
 
-  const filtered = sortedWords(
-    state[listKey].filter((item) => {
-      const haystack = `${item.word} ${item.meaning} ${item.savedAt}`.toLowerCase();
-      return !searchInput.value.trim() || haystack.includes(searchInput.value.trim().toLowerCase());
-    }),
-    sortInput.value
-  );
+  const filtered = getFilteredWordEntries(listName);
   setCurrentFilteredWords(
     listName,
     filtered.map((item) => item.word)
@@ -1846,6 +1936,8 @@ function renderWordList(listName) {
   selectAllButton.disabled = getCurrentFilteredWords(listName).length === 0;
   selectAllButton.textContent = allFilteredSelected ? "Cancel" : "Select All";
   selectAllButton.classList.toggle("is-active", allFilteredSelected);
+  if (listName === "reading") elements.exportReadingButton.disabled = filtered.length === 0;
+  else elements.exportSpeakingButton.disabled = filtered.length === 0;
   deleteSelectedButton.disabled = getSelectedWords(listName).length === 0;
 }
 
@@ -2454,6 +2546,8 @@ async function saveTodayPracticeToHistory() {
     originalTranscript: state.transcript,
     correctedTranscript: state.feedback.correctedTranscript || state.transcript || "",
     score: typeof state.feedback.overallScore === "number" ? state.feedback.overallScore : 89,
+    easyExample: state.feedback.easy || "",
+    advancedExample: state.feedback.advanced || "",
   };
 
   try {
@@ -2919,6 +3013,9 @@ elements.deleteAllHistory.addEventListener("click", () => {
 elements.selectAllHistoryButton.addEventListener("click", () => {
   selectAllFilteredHistory();
 });
+elements.exportHistoryButton.addEventListener("click", () => {
+  exportHistoryCsv();
+});
 
 elements.vocabularySearch.addEventListener("input", () => {
   readingPage = 1;
@@ -2932,6 +3029,9 @@ elements.vocabularySort.addEventListener("change", () => {
 });
 elements.selectAllReadingButton.addEventListener("click", () => {
   selectAllFilteredWords("reading");
+});
+elements.exportReadingButton.addEventListener("click", () => {
+  exportWordListCsv("reading");
 });
 elements.deleteSelectedReadingButton.addEventListener("click", () => {
   deleteSelectedWords("reading");
@@ -2957,6 +3057,9 @@ elements.speakingSort.addEventListener("change", () => {
 });
 elements.selectAllSpeakingButton.addEventListener("click", () => {
   selectAllFilteredWords("speaking");
+});
+elements.exportSpeakingButton.addEventListener("click", () => {
+  exportWordListCsv("speaking");
 });
 elements.deleteSelectedSpeakingButton.addEventListener("click", () => {
   deleteSelectedWords("speaking");

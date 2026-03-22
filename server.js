@@ -95,7 +95,17 @@ app.post("/api/review/speaking", (req, res) => {
 });
 
 app.post("/api/history", (req, res) => {
-  const { title, summary, image, date, originalTranscript, correctedTranscript, score } = req.body;
+  const {
+    title,
+    summary,
+    image,
+    date,
+    originalTranscript,
+    correctedTranscript,
+    score,
+    easyExample,
+    advancedExample,
+  } = req.body;
   const bootstrap = getBootstrap(formatIsoDate(new Date()));
   const history = addHistoryEntry({
     id: `hist-${Date.now()}`,
@@ -104,6 +114,8 @@ app.post("/api/history", (req, res) => {
     image: image || bootstrap.todayPrompt.image,
     date: date || formatIsoDate(new Date()),
     score: typeof score === "number" ? clamp(Math.round(score), 0, 100) : 89,
+    easyExample: easyExample || "",
+    advancedExample: advancedExample || "",
     originalTranscript: originalTranscript || "",
     correctedTranscript: correctedTranscript || "",
   });

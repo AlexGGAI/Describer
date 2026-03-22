@@ -222,6 +222,10 @@
                 Select All
               </button>
 
+              <button class="ghost-button history-delete-button-wide" id="export-history" type="button">
+                Export
+              </button>
+
               <button class="ghost-button history-delete-button-wide" id="delete-all-history" type="button">
                 Delete
               </button>
@@ -234,8 +238,8 @@
             </div>
 
             <div class="toggle-row history-view-mode-row">
-              <button class="toggle-button" data-history-card-mode="lite">Lite Mode</button>
-              <button class="toggle-button is-active" data-history-card-mode="full">Full Mode</button>
+              <button class="toggle-button" data-history-card-mode="lite">Lite</button>
+              <button class="toggle-button is-active" data-history-card-mode="full">Full</button>
             </div>
 
             <div class="history-mode-controls is-hidden" id="history-month-controls">
@@ -288,15 +292,6 @@
                 />
               </label>
 
-              <div class="toggle-row review-mode-toggle word-mode-toggle inline-word-mode-toggle">
-                <button class="toggle-button is-active" data-word-mode="vocabulary-lite">
-                  Lite Mode
-                </button>
-                <button class="toggle-button" data-word-mode="vocabulary-full">
-                  Full Mode
-                </button>
-              </div>
-
               <label class="date-field compact-field">
                 <span class="eyebrow">Order</span>
                 <select id="vocabulary-sort">
@@ -306,8 +301,21 @@
                 </select>
               </label>
 
+              <div class="toggle-row review-mode-toggle word-mode-toggle inline-word-mode-toggle">
+                <button class="toggle-button is-active" data-word-mode="vocabulary-lite">
+                  Lite
+                </button>
+                <button class="toggle-button" data-word-mode="vocabulary-full">
+                  Full
+                </button>
+              </div>
+
               <button class="ghost-button history-delete-button-wide" id="select-all-reading" type="button">
                 Select All
+              </button>
+
+              <button class="ghost-button history-delete-button-wide" id="export-reading" type="button">
+                Export
               </button>
 
               <button class="ghost-button history-delete-button-wide" id="delete-selected-reading" type="button">
@@ -513,15 +521,6 @@
                 />
               </label>
 
-              <div class="toggle-row review-mode-toggle word-mode-toggle inline-word-mode-toggle">
-                <button class="toggle-button is-active" data-word-mode="speaking-lite">
-                  Lite Mode
-                </button>
-                <button class="toggle-button" data-word-mode="speaking-full">
-                  Full Mode
-                </button>
-              </div>
-
               <label class="date-field compact-field">
                 <span class="eyebrow">Order</span>
                 <select id="speaking-sort">
@@ -531,8 +530,21 @@
                 </select>
               </label>
 
+              <div class="toggle-row review-mode-toggle word-mode-toggle inline-word-mode-toggle">
+                <button class="toggle-button is-active" data-word-mode="speaking-lite">
+                  Lite
+                </button>
+                <button class="toggle-button" data-word-mode="speaking-full">
+                  Full
+                </button>
+              </div>
+
               <button class="ghost-button history-delete-button-wide" id="select-all-speaking" type="button">
                 Select All
+              </button>
+
+              <button class="ghost-button history-delete-button-wide" id="export-speaking" type="button">
+                Export
               </button>
 
               <button class="ghost-button history-delete-button-wide" id="delete-selected-speaking" type="button">

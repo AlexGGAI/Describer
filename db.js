@@ -42,7 +42,9 @@ db.exec(`
     title TEXT NOT NULL,
     summary TEXT NOT NULL,
     image TEXT NOT NULL,
-    score INTEGER NOT NULL DEFAULT 89
+    score INTEGER NOT NULL DEFAULT 89,
+    easy_example TEXT NOT NULL DEFAULT '',
+    advanced_example TEXT NOT NULL DEFAULT ''
   );
 `);
 
@@ -91,8 +93,8 @@ export function updateReviewCount(listName, word, matched) {
 
 export function addHistoryEntry(entry) {
   db.prepare(
-    `INSERT INTO history (id, date, title, summary, image, score, original_transcript, corrected_transcript)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO history (id, date, title, summary, image, score, easy_example, advanced_example, original_transcript, corrected_transcript)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     entry.id,
     entry.date,
@@ -100,6 +102,8 @@ export function addHistoryEntry(entry) {
     entry.summary,
     entry.image,
     entry.score ?? 89,
+    entry.easyExample || "",
+    entry.advancedExample || "",
     entry.originalTranscript || "",
     entry.correctedTranscript || ""
   );
@@ -133,6 +137,8 @@ function getHistory() {
     .prepare(
       `SELECT id, date, title, summary, image,
               score,
+              easy_example as easyExample,
+              advanced_example as advancedExample,
               original_transcript as originalTranscript,
               corrected_transcript as correctedTranscript
        FROM history
@@ -152,6 +158,12 @@ function ensureHistoryColumns() {
   }
   if (!names.has("score")) {
     db.exec("ALTER TABLE history ADD COLUMN score INTEGER NOT NULL DEFAULT 89");
+  }
+  if (!names.has("easy_example")) {
+    db.exec("ALTER TABLE history ADD COLUMN easy_example TEXT NOT NULL DEFAULT ''");
+  }
+  if (!names.has("advanced_example")) {
+    db.exec("ALTER TABLE history ADD COLUMN advanced_example TEXT NOT NULL DEFAULT ''");
   }
 }
 
@@ -207,8 +219,8 @@ function seedAppDataIfNeeded() {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertHistory = db.prepare(
-    `INSERT INTO history (id, date, title, summary, image, score, original_transcript, corrected_transcript)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO history (id, date, title, summary, image, score, easy_example, advanced_example, original_transcript, corrected_transcript)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const tx = db.transaction(() => {
@@ -244,6 +256,8 @@ function seedAppDataIfNeeded() {
         item.summary,
         item.image,
         item.score ?? 89,
+        item.easyExample || "",
+        item.advancedExample || "",
         item.originalTranscript || "",
         item.correctedTranscript || ""
       );

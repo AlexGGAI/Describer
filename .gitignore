@@ -6,3 +6,4 @@ dist
 local-archive/
 data/*.sqlite-shm
 data/*.sqlite-wal
+data/*.log
