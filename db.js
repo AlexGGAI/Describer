@@ -45,6 +45,8 @@ db.exec(`
   );
 `);
 
+ensureHistoryColumns();
+
 seedPromptsIfNeeded();
 seedAppDataIfNeeded();
 
@@ -88,8 +90,27 @@ export function updateReviewCount(listName, word, matched) {
 
 export function addHistoryEntry(entry) {
   db.prepare(
-    `INSERT INTO history (id, date, title, summary, image) VALUES (?, ?, ?, ?, ?)`
-  ).run(entry.id, entry.date, entry.title, entry.summary, entry.image);
+    `INSERT INTO history (id, date, title, summary, image, original_transcript, corrected_transcript)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    entry.id,
+    entry.date,
+    entry.title,
+    entry.summary,
+    entry.image,
+    entry.originalTranscript || "",
+    entry.correctedTranscript || ""
+  );
+  return getHistory();
+}
+
+export function deleteHistoryEntry(id) {
+  db.prepare("DELETE FROM history WHERE id = ?").run(id);
+  return getHistory();
+}
+
+export function clearHistoryEntries() {
+  db.prepare("DELETE FROM history").run();
   return getHistory();
 }
 
@@ -108,9 +129,24 @@ function getWords(listName) {
 function getHistory() {
   return db
     .prepare(
-      "SELECT id, date, title, summary, image FROM history ORDER BY date DESC, id DESC"
+      `SELECT id, date, title, summary, image,
+              original_transcript as originalTranscript,
+              corrected_transcript as correctedTranscript
+       FROM history
+       ORDER BY date DESC, id DESC`
     )
     .all();
+}
+
+function ensureHistoryColumns() {
+  const columns = db.prepare("PRAGMA table_info(history)").all();
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has("original_transcript")) {
+    db.exec("ALTER TABLE history ADD COLUMN original_transcript TEXT NOT NULL DEFAULT ''");
+  }
+  if (!names.has("corrected_transcript")) {
+    db.exec("ALTER TABLE history ADD COLUMN corrected_transcript TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 function getPromptForDate(dateString) {
@@ -165,7 +201,8 @@ function seedAppDataIfNeeded() {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertHistory = db.prepare(
-    "INSERT INTO history (id, date, title, summary, image) VALUES (?, ?, ?, ?, ?)"
+    `INSERT INTO history (id, date, title, summary, image, original_transcript, corrected_transcript)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
 
   const tx = db.transaction(() => {
@@ -194,7 +231,15 @@ function seedAppDataIfNeeded() {
       );
     }
     for (const item of seed.history || []) {
-      insertHistory.run(item.id, item.date, item.title, item.summary, item.image);
+      insertHistory.run(
+        item.id,
+        item.date,
+        item.title,
+        item.summary,
+        item.image,
+        item.originalTranscript || "",
+        item.correctedTranscript || ""
+      );
     }
   });
 

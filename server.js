@@ -11,6 +11,8 @@ import { fileURLToPath } from "url";
 import {
   addHistoryEntry,
   addWord,
+  clearHistoryEntries,
+  deleteHistoryEntry,
   deleteWord,
   getBootstrap,
   updateReviewCount,
@@ -92,7 +94,7 @@ app.post("/api/review/speaking", (req, res) => {
 });
 
 app.post("/api/history", (req, res) => {
-  const { title, summary, image, date } = req.body;
+  const { title, summary, image, date, originalTranscript, correctedTranscript } = req.body;
   const bootstrap = getBootstrap(formatIsoDate(new Date()));
   const history = addHistoryEntry({
     id: `hist-${Date.now()}`,
@@ -100,8 +102,38 @@ app.post("/api/history", (req, res) => {
     summary: summary || "",
     image: image || bootstrap.todayPrompt.image,
     date: date || formatIsoDate(new Date()),
+    originalTranscript: originalTranscript || "",
+    correctedTranscript: correctedTranscript || "",
   });
   res.json({ history });
+});
+
+app.delete("/api/history/:id", (req, res) => {
+  const history = deleteHistoryEntry(req.params.id);
+  res.json({ history });
+});
+
+app.delete("/api/history", (_req, res) => {
+  const history = clearHistoryEntries();
+  res.json({ history });
+});
+
+app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
+  try {
+    const transcript = await resolveTranscript(req);
+    if (!transcript) {
+      return res.status(400).json({
+        error: "The recording could not be transcribed.",
+      });
+    }
+
+    res.json({ transcript });
+  } catch (error) {
+    console.error("/api/transcribe failed", error);
+    res.status(500).json({ error: "Failed to transcribe recording." });
+  } finally {
+    await cleanupUploadedFile(req.file);
+  }
 });
 
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
@@ -137,9 +169,14 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
                 `Picture prompt: ${promptTitle}\n` +
                 `Picture image URL for context: ${imageUrl || "not provided"}\n` +
                 `Learner transcript: ${transcript}\n\n` +
-                `Return only valid JSON with keys grammarOriginal, grammarCorrected, grammarNote, correctedTranscript, pronunciationWords, easy, advanced, keywords.\n` +
+                `Return only valid JSON with keys grammarOriginal, grammarCorrected, grammarNote, overallSuggestion, correctedTranscript, pronunciationWords, easy, advanced, keywords.\n` +
                 `pronunciationWords and keywords must be arrays of strings.\n` +
                 `Keep explanations short and simple.\n` +
+                `overallSuggestion should be one short general coaching suggestion about the full recording.\n` +
+                `easy must be 5 to 7 sentences.\n` +
+                `easy should use middle school or high school level vocabulary, include some picture details, and avoid overly fancy words.\n` +
+                `advanced must be 10 to 12 sentences.\n` +
+                `advanced should include more details and sound like clear public speaking, not poetic or profound writing.\n` +
                 `For pronunciationWords, infer likely hard words from the learner transcript and the picture context.`,
             },
           ],
@@ -161,6 +198,10 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
         grammarCorrected: parsed.grammarCorrected || `Correct: "${transcript}"`,
         grammarNote:
           parsed.grammarNote || "Try smoother grammar and more natural phrasing.",
+        overallSuggestion:
+          parsed.overallSuggestion ||
+          parsed.grammarNote ||
+          "Try speaking a little more slowly and keep each sentence clear and direct.",
         correctedTranscript: parsed.correctedTranscript || transcript,
         pronunciationWords: Array.isArray(parsed.pronunciationWords)
           ? parsed.pronunciationWords.slice(0, 4)

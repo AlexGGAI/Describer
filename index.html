@@ -31,17 +31,6 @@
           <button class="nav-link" data-view="settings">Review</button>
         </nav>
 
-        <section class="sidebar-card">
-          <p class="eyebrow">Daily Goal</p>
-          <div class="goal-row">
-            <strong>7 day streak</strong>
-            <span>4/5 prompts this week</span>
-          </div>
-          <div class="goal-progress" aria-hidden="true">
-            <span></span>
-          </div>
-        </section>
-
         <section class="sidebar-card shortcut-card">
           <p class="eyebrow">Shortcut</p>
           <p>
@@ -52,14 +41,7 @@
 
       <main class="main">
         <header class="topbar">
-          <div>
-            <p class="eyebrow" id="today-date">March 19</p>
-            <h2>Daily Practice</h2>
-          </div>
-          <div class="topbar-actions">
-            <button class="ghost-button">Streak</button>
-            <button class="primary-button">Speak</button>
-          </div>
+          <p class="eyebrow" id="today-date">March 19</p>
         </header>
 
         <section class="view is-visible" id="view-today">
@@ -81,20 +63,24 @@
 
             <article class="practice-card panel">
               <div class="panel-heading">
-                <div>
-                  <p class="eyebrow">Speak</p>
-                  <h3>Your voice</h3>
+                <p class="eyebrow">Speak</p>
+                <button class="ghost-button" id="test-mic-button">Test Mic</button>
+              </div>
+
+              <div class="action-row speaking-actions">
+                <button class="ghost-button speak-action-button" id="start-speaking-button">Start</button>
+                <button class="ghost-button speak-action-button" id="finish-speaking-button" disabled>Finish</button>
+                <button class="ghost-button speak-action-button" id="restart-speaking-button">Restart</button>
+              </div>
+
+              <div class="transcript-box speaking-transcript-box">
+                <div class="transcript-box-header">
+                  <p class="eyebrow">Transcript</p>
+                  <div class="processing-indicator is-hidden" id="transcript-processing">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span>Processing...</span>
+                  </div>
                 </div>
-                <span class="status-pill" id="mic-status">Microphone ready</span>
-              </div>
-
-              <div class="waveform" aria-hidden="true">
-                <span></span><span></span><span></span><span></span><span></span
-                ><span></span><span></span><span></span>
-              </div>
-
-              <div class="transcript-box">
-                <p class="eyebrow">Transcript</p>
                 <p id="transcript-text">
                   I think this picture show a busy market. Many people is walking
                   and some seller are smiling. The fruits look very fresh and the
@@ -102,91 +88,120 @@
                 </p>
               </div>
 
-              <div class="action-row">
-                <button class="primary-button" id="start-speaking-button">Start Speaking</button>
-                <button class="ghost-button" id="finish-speaking-button" disabled>Finish Speaking</button>
-              </div>
-
-              <div class="action-row">
-                <button class="ghost-button" id="test-mic-button">Test Mic</button>
-                <button class="ghost-button" id="retry-button">Try Again</button>
-                <button class="primary-button" id="submit-button">Submit to AI</button>
-              </div>
               <p class="muted" id="mic-test-result"></p>
             </article>
           </div>
 
           <div class="feedback-grid">
             <article class="panel">
-              <div class="panel-heading">
-                <div>
-                  <p class="eyebrow">Feedback</p>
-                  <h3>Grammar + sound</h3>
+              <div class="panel-heading feedback-panel-heading">
+                <p class="eyebrow">Feedback</p>
+              </div>
+
+              <div class="feedback-original-box">
+                <p class="eyebrow">Original</p>
+                <p id="feedback-original-transcript">
+                  I think this picture show a busy market. Many people is walking
+                  and some seller are smiling. The fruits look very fresh and the
+                  street feels lively.
+                </p>
+              </div>
+
+              <div class="feedback-block">
+                <div class="feedback-label">Grammar</div>
+                <div id="grammar-sentences" class="feedback-sentences">
+                  <div class="feedback-sentence">
+                    <p class="feedback-row feedback-original">
+                      this picture <span class="mistake grammar">show</span> a busy market.
+                    </p>
+                    <p class="feedback-row feedback-corrected">
+                      this picture shows a busy market.
+                    </p>
+                  </div>
                 </div>
               </div>
 
               <div class="feedback-block">
-                <div class="feedback-label">Grammar fix</div>
-                <p class="feedback-original" id="grammar-original">
-                  “this picture <span class="mistake grammar">show</span> a busy
-                  market”
-                </p>
-                <p class="feedback-corrected" id="grammar-corrected">
-                  Correct: “this picture <strong>shows</strong> a busy market”
-                </p>
-                <p class="feedback-note" id="grammar-note">
-                  Use <strong>shows</strong> because the subject is singular.
-                </p>
-              </div>
-
-              <div class="feedback-block">
-                <div class="feedback-label">Pronunciation fix</div>
-                <p class="feedback-original" id="pronunciation-flags">
-                  Flagged words:
+                <div class="feedback-block-header">
+                  <div class="feedback-label">Pronunciation</div>
+                  <p class="feedback-inline-note">Tap a red word to hear &amp; save</p>
+                </div>
+                <div class="pronunciation-flags" id="pronunciation-flags">
                   <button class="word-chip issue" data-word="seller">
                     seller
                   </button>
                   <button class="word-chip issue" data-word="lively">
                     lively
                   </button>
-                </p>
-                <p class="feedback-note">Tap a red word to hear it and save it.</p>
+                </div>
               </div>
             </article>
 
-            <article class="panel model-card">
-              <div class="panel-heading">
-                <div>
-                  <p class="eyebrow">Models</p>
-                  <h3>Two versions</h3>
+            <div class="feedback-side-stack">
+              <article class="panel model-card">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Example</p>
+                  </div>
+                  <div class="toggle-row" id="model-toggle-row">
+                    <button class="toggle-button is-active" data-model="easy">
+                      Easy
+                    </button>
+                    <button class="toggle-button" data-model="advanced">
+                      Advanced
+                    </button>
+                  </div>
                 </div>
-                <div class="toggle-row">
-                  <button class="toggle-button is-active" data-model="easy">
-                    Easy
-                  </button>
-                  <button class="toggle-button" data-model="advanced">
-                    Advanced
-                  </button>
+
+                <p class="muted model-locked-note" id="model-locked-note">
+                  The example will appear after the judgment is complete.
+                </p>
+
+                <div class="model-copy is-visible" id="model-easy">
+                  <div class="example-audio-row">
+                    <button
+                      class="inline-audio-button"
+                      data-example-audio="easy"
+                      aria-label="Play easy example"
+                    >
+                      &#128264;
+                    </button>
+                  </div>
+                  <p id="model-easy-text">
+                    This picture shows a busy market in the morning. Many people
+                    are walking around and looking at fresh fruit. The sellers seem
+                    friendly, and the street feels colorful and lively.
+                  </p>
                 </div>
-              </div>
 
-              <div class="model-copy is-visible" id="model-easy">
-                <p id="model-easy-text">
-                  This picture shows a busy market in the morning. Many people
-                  are walking around and looking at fresh fruit. The sellers seem
-                  friendly, and the street feels colorful and lively.
-                </p>
-              </div>
+                <div class="model-copy" id="model-advanced">
+                  <div class="example-audio-row">
+                    <button
+                      class="inline-audio-button"
+                      data-example-audio="advanced"
+                      aria-label="Play advanced example"
+                    >
+                      &#128264;
+                    </button>
+                  </div>
+                  <p id="model-advanced-text">
+                    The image captures a vibrant open-air market where shoppers are
+                    moving through a lively street lined with fresh produce. The
+                    bright colors, relaxed expressions, and natural light create a
+                    warm and energetic atmosphere.
+                  </p>
+                </div>
+              </article>
 
-              <div class="model-copy" id="model-advanced">
-                <p id="model-advanced-text">
-                  The image captures a vibrant open-air market where shoppers are
-                  moving through a lively street lined with fresh produce. The
-                  bright colors, relaxed expressions, and natural light create a
-                  warm and energetic atmosphere.
+              <article class="panel ai-suggestion-card">
+                <div class="panel-heading feedback-panel-heading">
+                  <p class="eyebrow">AI Suggestions</p>
+                </div>
+                <p id="ai-suggestion-text">
+                  Try to keep each sentence shorter and pause a little more so your ideas sound clearer.
                 </p>
-              </div>
-            </article>
+              </article>
+            </div>
           </div>
 
           <div class="lower-grid">
@@ -256,6 +271,7 @@
             <div class="history-header-actions">
               <button class="ghost-button" id="jump-today-history">Reset</button>
               <button class="ghost-button" id="open-months">Browse Months</button>
+              <button class="ghost-button" id="delete-all-history">Delete All</button>
             </div>
           </div>
 
@@ -748,8 +764,8 @@
               </p>
               <div class="action-row">
                 <button class="ghost-button small-button">Delete</button>
-                <button class="primary-button small-button">Practice</button>
-                <button class="ghost-button small-button">Judge</button>
+                <button class="primary-button small-button">Start</button>
+                <button class="ghost-button small-button">Finish</button>
               </div>
             </article>
 
@@ -777,8 +793,8 @@
               </p>
               <div class="action-row">
                 <button class="ghost-button small-button">Delete</button>
-                <button class="primary-button small-button">Practice</button>
-                <button class="ghost-button small-button">Judge</button>
+                <button class="primary-button small-button">Start</button>
+                <button class="ghost-button small-button">Finish</button>
               </div>
             </article>
 
@@ -806,8 +822,8 @@
               </p>
               <div class="action-row">
                 <button class="ghost-button small-button">Delete</button>
-                <button class="primary-button small-button">Practice</button>
-                <button class="ghost-button small-button">Judge</button>
+                <button class="primary-button small-button">Start</button>
+                <button class="ghost-button small-button">Finish</button>
               </div>
             </article>
 
@@ -835,8 +851,8 @@
               </p>
               <div class="action-row">
                 <button class="ghost-button small-button">Delete</button>
-                <button class="primary-button small-button">Practice</button>
-                <button class="ghost-button small-button">Judge</button>
+                <button class="primary-button small-button">Start</button>
+                <button class="ghost-button small-button">Finish</button>
               </div>
             </article>
           </div>
@@ -962,8 +978,8 @@
                 </div>
 
                 <p class="meaning" id="speaking-review-helper">
-                  Say the word clearly, then let AI judge whether your
-                  pronunciation is correct.
+                  Say the word clearly, then press Finish so AI can judge your
+                  pronunciation.
                 </p>
 
                 <div class="waveform review-wave">
@@ -972,9 +988,9 @@
                 </div>
 
                 <div class="action-row">
-                  <button class="primary-button small-button" id="start-speaking-review">Start Speaking</button>
+                  <button class="primary-button small-button" id="start-speaking-review">Start</button>
                   <button class="ghost-button small-button" id="run-ai-judge">
-                    Let AI Judge
+                    Finish
                   </button>
                 </div>
 
@@ -1022,6 +1038,34 @@
         <button class="primary-button" id="add-speaking">Add to Speaking List</button>
       </div>
     </aside>
+
+    <div class="history-preview-backdrop" id="history-preview-backdrop" aria-hidden="true">
+      <aside class="history-preview" id="history-preview" aria-hidden="true">
+        <div class="drawer-top">
+          <p class="eyebrow">History Preview</p>
+          <button class="icon-button" id="close-history-preview" aria-label="Close history preview">
+            &#10005;
+          </button>
+        </div>
+        <img id="history-preview-image" src="" alt="" />
+        <div class="history-preview-copy">
+          <p class="eyebrow" id="history-preview-date">Mar 20</p>
+          <h3 id="history-preview-title">Practice</h3>
+          <p class="history-preview-summary" id="history-preview-summary"></p>
+        </div>
+        <div class="history-preview-section">
+          <p class="eyebrow">Original</p>
+          <p id="history-preview-original"></p>
+        </div>
+        <div class="history-preview-section">
+          <p class="eyebrow">Correct</p>
+          <p id="history-preview-corrected"></p>
+        </div>
+        <div class="drawer-actions">
+          <button class="ghost-button" id="delete-history-entry">Delete This</button>
+        </div>
+      </aside>
+    </div>
 
     <div class="shortcut-toast" id="shortcut-toast" aria-live="polite"></div>
 

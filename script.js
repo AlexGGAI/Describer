@@ -10,9 +10,9 @@ const todayPrompt = {
     "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
   alt: "A bright morning market street with fruit stands and people walking",
   easy:
-    "This picture shows a busy market in the morning. Many people are walking around and looking at fresh fruit. The sellers seem friendly, and the street feels colorful and lively.",
+    "This picture shows a busy street market in the morning. I can see many people walking between the stalls. Some sellers are standing near fresh fruit and vegetables. The street looks colorful, busy, and full of energy. There are many small details that make the scene interesting to describe. Overall, it feels like a lively place where people are shopping and talking.",
   advanced:
-    "The image captures a vibrant open-air market where shoppers are moving through a lively street lined with fresh produce. The bright colors, relaxed expressions, and natural light create a warm and energetic atmosphere.",
+    "Today I would describe a busy street market filled with people, color, and movement. The first thing I notice is that the street is full of activity from one side to the other. Several people are walking through the market and looking at the goods on display. Some sellers seem to be standing near fresh fruit and vegetables, ready to help customers. In the middle of the scene, the market feels open, bright, and easy to observe. In the background, the street continues and gives the picture more depth. The colors make the whole place look warm and lively without feeling too crowded. This kind of scene is useful for speaking practice because there are people, objects, and actions to describe. I can also talk about the mood, which seems friendly and active. If I were giving a short presentation, I would say this picture shows everyday life in a very clear way. Overall, it is a detailed image that gives the speaker many ideas to talk about.",
   keywords: ["market", "vendor", "fresh produce", "crowded", "lively", "atmosphere"],
 };
 
@@ -143,6 +143,8 @@ function createDefaultState() {
       readingPending: null,
       speakingIndex: 0,
       speakingAttempt: "",
+      speakingStatus: "Say the word clearly, then press Finish.",
+      speakingJudged: false,
     },
   };
 }
@@ -165,6 +167,13 @@ let dailyAudioBlob = null;
 let speakingAudioBlob = null;
 let micPermissionGranted = false;
 let isTodayRecording = false;
+let isTodayTranscriptProcessing = false;
+let todayTranscribeRequestId = 0;
+let todayAutoSubmitRequested = false;
+let todayPracticeFinished = false;
+let speakingReviewAutoJudgeRequested = false;
+let isSpeakingReviewProcessing = false;
+let activeHistoryPreviewId = null;
 
 const elements = {
   views: {
@@ -177,20 +186,21 @@ const elements = {
   todayDate: document.getElementById("today-date"),
   dailyImage: document.getElementById("daily-image"),
   dailyPromptTitle: document.getElementById("daily-prompt-title"),
-  micStatus: document.getElementById("mic-status"),
   startSpeakingButton: document.getElementById("start-speaking-button"),
   finishSpeakingButton: document.getElementById("finish-speaking-button"),
   transcriptText: document.getElementById("transcript-text"),
+  transcriptProcessing: document.getElementById("transcript-processing"),
   testMicButton: document.getElementById("test-mic-button"),
+  restartSpeakingButton: document.getElementById("restart-speaking-button"),
   micTestResult: document.getElementById("mic-test-result"),
-  retryButton: document.getElementById("retry-button"),
-  submitButton: document.getElementById("submit-button"),
-  grammarOriginal: document.getElementById("grammar-original"),
-  grammarCorrected: document.getElementById("grammar-corrected"),
-  grammarNote: document.getElementById("grammar-note"),
+  feedbackOriginalTranscript: document.getElementById("feedback-original-transcript"),
+  grammarSentences: document.getElementById("grammar-sentences"),
   pronunciationFlags: document.getElementById("pronunciation-flags"),
   modelEasyText: document.getElementById("model-easy-text"),
   modelAdvancedText: document.getElementById("model-advanced-text"),
+  modelToggleRow: document.getElementById("model-toggle-row"),
+  modelLockedNote: document.getElementById("model-locked-note"),
+  aiSuggestionText: document.getElementById("ai-suggestion-text"),
   keywordGrid: document.getElementById("keyword-grid"),
   recentSavedList: document.getElementById("recent-saved-list"),
   historySearch: document.getElementById("history-search"),
@@ -199,6 +209,7 @@ const elements = {
   monthSummaryTitle: document.getElementById("month-summary-title"),
   monthSessionCount: document.getElementById("month-session-count"),
   historyGrid: document.getElementById("history-grid"),
+  deleteAllHistory: document.getElementById("delete-all-history"),
   historyPrev: document.getElementById("history-prev"),
   historyNext: document.getElementById("history-next"),
   historyPageStatus: document.getElementById("history-page-status"),
@@ -252,6 +263,16 @@ const elements = {
   playAudio: document.getElementById("play-audio"),
   addReading: document.getElementById("add-vocabulary"),
   addSpeaking: document.getElementById("add-speaking"),
+  historyPreviewBackdrop: document.getElementById("history-preview-backdrop"),
+  historyPreview: document.getElementById("history-preview"),
+  historyPreviewImage: document.getElementById("history-preview-image"),
+  historyPreviewDate: document.getElementById("history-preview-date"),
+  historyPreviewTitle: document.getElementById("history-preview-title"),
+  historyPreviewSummary: document.getElementById("history-preview-summary"),
+  historyPreviewOriginal: document.getElementById("history-preview-original"),
+  historyPreviewCorrected: document.getElementById("history-preview-corrected"),
+  closeHistoryPreview: document.getElementById("close-history-preview"),
+  deleteHistoryEntry: document.getElementById("delete-history-entry"),
   shortcutToast: document.getElementById("shortcut-toast"),
 };
 
@@ -275,10 +296,15 @@ async function loadBootstrap() {
     if (!response.ok) return;
     const data = await response.json();
     apiConfigured = Boolean(data.configured);
-    if (data.todayPrompt) Object.assign(todayPrompt, data.todayPrompt);
+    if (data.todayPrompt) {
+      Object.assign(todayPrompt, data.todayPrompt);
+      todayPrompt.easy = ensureExampleVariant(todayPrompt.easy, "easy", todayPrompt);
+      todayPrompt.advanced = ensureExampleVariant(todayPrompt.advanced, "advanced", todayPrompt);
+    }
     if (Array.isArray(data.readingList)) state.readingList = data.readingList;
     if (Array.isArray(data.speakingList)) state.speakingList = data.speakingList;
     if (Array.isArray(data.history)) state.history = data.history;
+    state.feedback = normalizeFeedback(state.feedback);
   } catch {
     apiConfigured = false;
   }
@@ -346,11 +372,27 @@ function analyzeTranscript(text) {
     grammarOriginal: selectedFix.original,
     grammarCorrected: selectedFix.corrected,
     grammarNote: selectedFix.note,
+    overallSuggestion:
+      "Good detail. Next time, slow down a little and keep each sentence shorter so your grammar stays clear.",
     correctedTranscript: corrected,
     pronunciationWords: flagged.slice(0, 3).length ? flagged.slice(0, 3) : ["seller", "lively"],
     keywords: todayPrompt.keywords,
-    easy: todayPrompt.easy,
-    advanced: todayPrompt.advanced,
+    easy: buildEasyExample(todayPrompt),
+    advanced: buildAdvancedExample(todayPrompt),
+  };
+}
+
+function createEmptyFeedback() {
+  return {
+    grammarOriginal: "",
+    grammarCorrected: "",
+    grammarNote: "",
+    overallSuggestion: "AI suggestions will appear here after your recording is judged.",
+    correctedTranscript: "",
+    pronunciationWords: [],
+    keywords: todayPrompt.keywords,
+    easy: buildEasyExample(todayPrompt),
+    advanced: buildAdvancedExample(todayPrompt),
   };
 }
 
@@ -389,10 +431,39 @@ function speakWord(word) {
   synth.speak(utterance);
 }
 
+function speakText(text) {
+  if (!synth || !text) return;
+  synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.9;
+  synth.speak(utterance);
+}
+
 function updateTodayRecordingControls() {
-  elements.startSpeakingButton.disabled = isTodayRecording;
+  elements.startSpeakingButton.textContent = isTodayRecording ? "Recording" : "Start";
+  elements.finishSpeakingButton.textContent = isTodayTranscriptProcessing
+    ? "Processing"
+    : todayPracticeFinished
+      ? "Judged"
+      : "Finish";
+
+  elements.startSpeakingButton.disabled =
+    isTodayRecording || isTodayTranscriptProcessing || todayPracticeFinished;
   elements.finishSpeakingButton.disabled = !isTodayRecording;
-  elements.submitButton.disabled = isTodayRecording;
+  elements.testMicButton.disabled = isTodayRecording || isTodayTranscriptProcessing;
+  elements.restartSpeakingButton.disabled = isTodayRecording || isTodayTranscriptProcessing;
+
+  elements.startSpeakingButton.classList.toggle("is-start-active", isTodayRecording);
+  elements.finishSpeakingButton.classList.toggle(
+    "is-finish-active",
+    isTodayTranscriptProcessing || todayPracticeFinished
+  );
+}
+
+function setTodayTranscriptProcessing(isProcessing) {
+  isTodayTranscriptProcessing = isProcessing;
+  elements.transcriptProcessing.classList.toggle("is-hidden", !isProcessing);
+  updateTodayRecordingControls();
 }
 
 function collectRecognitionTranscript(event) {
@@ -402,6 +473,217 @@ function collectRecognitionTranscript(event) {
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function splitIntoSentences(text) {
+  const cleaned = String(text || "").trim();
+  if (!cleaned) return [];
+  const matches = cleaned.match(/[^.!?]+[.!?]?/g);
+  return (matches || [cleaned]).map((sentence) => sentence.trim()).filter(Boolean);
+}
+
+function formatSceneLabel(prompt = todayPrompt) {
+  return String(prompt.title || "this picture")
+    .replace(/^describe\s+/i, "")
+    .replace(/\.$/, "")
+    .replace(/^this\s+/i, "this ")
+    .trim()
+    .toLowerCase();
+}
+
+function pickPromptKeyword(prompt, index, fallback) {
+  return prompt.keywords?.[index] || fallback;
+}
+
+function buildEasyExample(prompt = todayPrompt) {
+  const scene = formatSceneLabel(prompt);
+  const keyword1 = pickPromptKeyword(prompt, 0, "details");
+  const keyword2 = pickPromptKeyword(prompt, 1, "people");
+  const keyword3 = pickPromptKeyword(prompt, 2, "movement");
+  const keyword4 = pickPromptKeyword(prompt, 3, "color");
+
+  return [
+    `This picture shows ${scene}.`,
+    `I can see ${keyword2} and many small details in the scene.`,
+    `There are clear things to describe, such as ${keyword1} and ${keyword3}.`,
+    `The place looks active, and people seem to be busy with their own actions.`,
+    `The colors and the background make the picture more interesting to talk about.`,
+    `Overall, this is a clear and useful picture for speaking practice because it has many simple details.`,
+  ].join(" ");
+}
+
+function buildAdvancedExample(prompt = todayPrompt) {
+  const scene = formatSceneLabel(prompt);
+  const keyword1 = pickPromptKeyword(prompt, 0, "details");
+  const keyword2 = pickPromptKeyword(prompt, 1, "people");
+  const keyword3 = pickPromptKeyword(prompt, 2, "objects");
+  const keyword4 = pickPromptKeyword(prompt, 3, "movement");
+  const keyword5 = pickPromptKeyword(prompt, 4, "energy");
+
+  return [
+    `Today I would like to describe ${scene}.`,
+    `The first thing I notice is that the picture has many visible details to talk about.`,
+    `There are ${keyword2} in the scene, which makes the image feel more active and natural.`,
+    `I can also notice ${keyword1} and ${keyword3}, which give the speaker more vocabulary to use.`,
+    `In the middle of the picture, the main action seems clear and easy to follow.`,
+    `The background also adds depth, so the scene does not feel flat or empty.`,
+    `Another useful point is the sense of ${keyword4}, because it helps describe what may be happening at that moment.`,
+    `The overall mood feels connected to ${keyword5}, but it still looks realistic and easy to explain.`,
+    `This kind of picture is good for public speaking practice because it allows the speaker to move from the main idea to smaller details.`,
+    `A speaker can describe the people, the setting, the objects, and the general mood in a logical order.`,
+    `That makes the description sound more organized and more confident.`,
+    `Overall, this image gives enough detail for a full spoken description without being too difficult to understand.`,
+  ].join(" ");
+}
+
+function ensureExampleVariant(text, mode, prompt = todayPrompt) {
+  const sentenceCount = splitIntoSentences(text).length;
+  if (mode === "easy" && sentenceCount >= 5 && sentenceCount <= 7) return text;
+  if (mode === "advanced" && sentenceCount >= 10 && sentenceCount <= 12) return text;
+  return mode === "easy" ? buildEasyExample(prompt) : buildAdvancedExample(prompt);
+}
+
+function normalizeFeedback(feedback = {}) {
+  return {
+    ...feedback,
+    easy: ensureExampleVariant(feedback.easy, "easy", todayPrompt),
+    advanced: ensureExampleVariant(feedback.advanced, "advanced", todayPrompt),
+  };
+}
+
+function normalizedSentence(text) {
+  return tokenizeForDiff(text)
+    .map((token) => comparableToken(token))
+    .filter(Boolean)
+    .join(" ");
+}
+
+function comparableToken(token) {
+  return token.toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
+}
+
+function tokenizeForDiff(text) {
+  return String(text || "").match(/\s+|[^\s]+/g) || [];
+}
+
+function findMatchedOriginalTokenIndexes(originalText, correctedText) {
+  const originalTokens = tokenizeForDiff(originalText);
+  const correctedTokens = tokenizeForDiff(correctedText);
+
+  const originalWords = originalTokens
+    .map((token, index) => ({ index, value: comparableToken(token) }))
+    .filter((token) => token.value);
+  const correctedWords = correctedTokens
+    .map((token) => ({ value: comparableToken(token) }))
+    .filter((token) => token.value);
+
+  const dp = Array.from({ length: originalWords.length + 1 }, () =>
+    new Array(correctedWords.length + 1).fill(0)
+  );
+
+  for (let i = originalWords.length - 1; i >= 0; i -= 1) {
+    for (let j = correctedWords.length - 1; j >= 0; j -= 1) {
+      dp[i][j] =
+        originalWords[i].value === correctedWords[j].value
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const matchedIndexes = new Set();
+  let i = 0;
+  let j = 0;
+
+  while (i < originalWords.length && j < correctedWords.length) {
+    if (originalWords[i].value === correctedWords[j].value) {
+      matchedIndexes.add(originalWords[i].index);
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+
+  return matchedIndexes;
+}
+
+function highlightOriginalSentence(originalText, correctedText) {
+  const tokens = tokenizeForDiff(originalText);
+  const matchedIndexes = findMatchedOriginalTokenIndexes(originalText, correctedText);
+
+  return tokens
+    .map((token, index) => {
+      if (/^\s+$/.test(token)) return token;
+      const comparable = comparableToken(token);
+      if (!comparable) return escapeHtml(token);
+      if (matchedIndexes.has(index)) return escapeHtml(token);
+      return `<span class="mistake grammar">${escapeHtml(token)}</span>`;
+    })
+    .join("");
+}
+
+function buildGrammarSentencePairs(originalText, correctedText) {
+  const originalSentences = splitIntoSentences(originalText);
+  const correctedSentences = splitIntoSentences(correctedText);
+
+  const filterChangedPairs = (pairs) =>
+    pairs.filter(
+      (pair) => normalizedSentence(pair.original) !== normalizedSentence(pair.corrected)
+    );
+
+  if (
+    originalSentences.length > 0 &&
+    correctedSentences.length > 0 &&
+    originalSentences.length === correctedSentences.length
+  ) {
+    return filterChangedPairs(
+      originalSentences.map((original, index) => ({
+        original,
+        corrected: correctedSentences[index],
+      }))
+    );
+  }
+
+  return filterChangedPairs([
+    {
+      original: String(originalText || "").trim(),
+      corrected: String(correctedText || "").trim() || String(originalText || "").trim(),
+    },
+  ]);
+}
+
+function renderGrammarFeedback(originalText, correctedText) {
+  const pairs = buildGrammarSentencePairs(originalText, correctedText);
+  if (!pairs.length) {
+    elements.grammarSentences.innerHTML = `<p class="feedback-empty">No grammar changes.</p>`;
+    return;
+  }
+
+  elements.grammarSentences.innerHTML = pairs
+    .map(
+      (pair) => `
+        <div class="feedback-sentence">
+          <p class="feedback-row feedback-original">
+            ${highlightOriginalSentence(pair.original, pair.corrected)}
+          </p>
+          <p class="feedback-row feedback-corrected">
+            ${escapeHtml(pair.corrected)}
+          </p>
+        </div>
+      `
+    )
+    .join("");
 }
 
 async function saveWordToList(word, listName) {
@@ -465,20 +747,21 @@ function renderToday() {
   elements.dailyImage.alt = todayPrompt.alt;
   elements.dailyPromptTitle.textContent = todayPrompt.title;
   elements.transcriptText.textContent =
-    state.transcript || "Tap Speak to start describing the picture.";
-  elements.micStatus.textContent = isTodayRecording
-    ? "Recording..."
-    : dailyAudioBlob
-      ? state.transcript.trim()
-        ? "Ready to submit"
-        : "Recording saved"
-      : micPermissionGranted
-        ? apiConfigured
-          ? "Ready to record"
-          : "Mic on, local only"
-        : apiConfigured
-          ? "Ready to record"
-          : "Need mic access";
+    state.transcript ||
+    (isTodayTranscriptProcessing
+      ? "Processing your recording..."
+      : "Tap Start to describe the picture.");
+  if (state.transcript && state.feedback.correctedTranscript) {
+    elements.feedbackOriginalTranscript.innerHTML = highlightOriginalSentence(
+      state.transcript,
+      state.feedback.correctedTranscript
+    );
+  } else {
+    elements.feedbackOriginalTranscript.textContent = state.transcript ||
+      (isTodayTranscriptProcessing
+        ? "Processing your recording..."
+        : "Your original transcript will appear here after you finish speaking.");
+  }
   elements.micTestResult.textContent = micPermissionGranted
     ? SpeechRecognitionApi
       ? apiConfigured
@@ -488,21 +771,35 @@ function renderToday() {
         ? "Mic OK. Recording available. Speech recognition unsupported."
         : "Mic OK. Recording available. Speech recognition unsupported. AI not configured."
     : "Mic not tested yet.";
-  elements.grammarOriginal.textContent = state.feedback.grammarOriginal;
-  elements.grammarCorrected.innerHTML = state.feedback.grammarCorrected.replace(
-    /Correct:/,
-    "<strong>Correct:</strong>"
-  );
-  elements.grammarNote.textContent = state.feedback.grammarNote;
+  renderGrammarFeedback(state.transcript, state.feedback.correctedTranscript);
   elements.modelEasyText.textContent = state.feedback.easy;
   elements.modelAdvancedText.textContent = state.feedback.advanced;
+  elements.aiSuggestionText.textContent =
+    state.feedback.overallSuggestion ||
+    state.feedback.grammarNote ||
+    "AI suggestions will appear here after your recording is judged.";
 
-  elements.pronunciationFlags.innerHTML = `Flagged words: ${state.feedback.pronunciationWords
-    .map(
-      (word) =>
-        `<button class="word-chip issue" data-word-value="${word}" data-word-select="${word}">${word}</button>`
-    )
-    .join(" ")}`;
+  const activeModelButton =
+    document.querySelector('.toggle-button.is-active[data-model]') ||
+    document.querySelector('.toggle-button[data-model="easy"]');
+  const activeModel = activeModelButton?.dataset.model || "easy";
+  elements.modelToggleRow.classList.toggle("is-hidden", !todayPracticeFinished);
+  elements.modelLockedNote.classList.toggle("is-hidden", todayPracticeFinished);
+  document.querySelectorAll(".model-copy").forEach((copy) => {
+    copy.classList.toggle(
+      "is-visible",
+      todayPracticeFinished && copy.id === `model-${activeModel}`
+    );
+  });
+
+  elements.pronunciationFlags.innerHTML = state.feedback.pronunciationWords.length
+    ? state.feedback.pronunciationWords
+        .map(
+          (word) =>
+            `<button class="word-chip issue" data-word-value="${word}" data-word-select="${word}">${word}</button>`
+        )
+        .join("")
+    : `<span class="muted">No flagged words.</span>`;
 
   elements.keywordGrid.innerHTML = state.feedback.keywords
     .map(
@@ -537,6 +834,7 @@ function renderToday() {
     .join("");
 
   updateTodayRecordingControls();
+  setTodayTranscriptProcessing(isTodayTranscriptProcessing);
 }
 
 function renderHistory() {
@@ -557,23 +855,116 @@ function renderHistory() {
   elements.historyGrid.innerHTML = visible
     .map(
       (entry) => `
-        <article class="history-card panel">
-          <img src="${entry.image}" alt="${entry.title}" />
+        <article
+          class="history-card panel"
+          data-history-open="${entry.id}"
+          role="button"
+          tabindex="0"
+          aria-label="Open history preview for ${escapeHtml(entry.title)}"
+        >
+          <div class="history-card-actions">
+            <button
+              class="history-delete-button"
+              data-history-delete="${entry.id}"
+              aria-label="Delete history entry ${escapeHtml(entry.title)}"
+            >
+              Delete
+            </button>
+          </div>
+          <img src="${entry.image}" alt="${escapeHtml(entry.title)}" />
           <div class="history-copy">
             <p class="eyebrow">${formatDateLabel(entry.date)}</p>
-            <h4>${entry.title}</h4>
-            <p>${entry.summary}</p>
+            <h4>${escapeHtml(entry.title)}</h4>
+            <p>${escapeHtml(entry.summary || "Open to review your original words and the corrected version.")}</p>
+          </div>
+          <div class="history-card-footer">
+            <button class="ghost-button history-open-button" data-history-open="${entry.id}">
+              Preview
+            </button>
           </div>
         </article>
       `
     )
     .join("");
 
+  if (!visible.length) {
+    elements.historyGrid.innerHTML = `
+      <article class="panel history-empty-state">
+        <p class="eyebrow">No History</p>
+        <h4>No saved practice matches this view.</h4>
+        <p>Try another month, clear the search, or save a new speaking practice.</p>
+      </article>
+    `;
+  }
+
   elements.historyPageStatus.textContent = `Page ${historyPage} of ${totalPages}`;
   elements.historyPrev.disabled = historyPage === 1;
   elements.historyNext.disabled = historyPage === totalPages;
   elements.monthSummaryTitle.textContent = formatMonthLabel(currentMonth);
   elements.monthSessionCount.textContent = `${filtered.length} session${filtered.length === 1 ? "" : "s"}`;
+}
+
+function openHistoryPreview(id) {
+  const entry = state.history.find((item) => item.id === id);
+  if (!entry) return;
+  activeHistoryPreviewId = id;
+  elements.historyPreviewImage.src = entry.image;
+  elements.historyPreviewImage.alt = entry.title;
+  elements.historyPreviewDate.textContent = formatDateLabel(entry.date);
+  elements.historyPreviewTitle.textContent = entry.title;
+  elements.historyPreviewSummary.textContent = entry.summary || "";
+  elements.historyPreviewOriginal.textContent =
+    entry.originalTranscript || "No original transcript was saved for this older practice.";
+  elements.historyPreviewCorrected.textContent =
+    entry.correctedTranscript || entry.summary || "No corrected version was saved for this older practice.";
+  elements.historyPreviewBackdrop.classList.add("is-open");
+  elements.historyPreviewBackdrop.setAttribute("aria-hidden", "false");
+  elements.historyPreview.setAttribute("aria-hidden", "false");
+}
+
+function closeHistoryPreview() {
+  activeHistoryPreviewId = null;
+  elements.historyPreviewBackdrop.classList.remove("is-open");
+  elements.historyPreviewBackdrop.setAttribute("aria-hidden", "true");
+  elements.historyPreview.setAttribute("aria-hidden", "true");
+}
+
+async function deleteHistory(id) {
+  try {
+    const response = await fetch(`/api/history/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (response.ok) {
+      const data = await response.json();
+      state.history = data.history;
+    } else {
+      state.history = state.history.filter((entry) => entry.id !== id);
+    }
+  } catch {
+    state.history = state.history.filter((entry) => entry.id !== id);
+  }
+  if (activeHistoryPreviewId === id) closeHistoryPreview();
+  historyPage = 1;
+  renderHistory();
+  showToast("History deleted");
+}
+
+async function deleteAllHistory() {
+  try {
+    const response = await fetch("/api/history", { method: "DELETE" });
+    if (response.ok) {
+      const data = await response.json();
+      state.history = data.history;
+    } else {
+      state.history = [];
+    }
+  } catch {
+    state.history = [];
+  }
+  closeHistoryPreview();
+  historyPage = 1;
+  renderHistory();
+  showToast("All history deleted");
 }
 
 function renderWordList(listName) {
@@ -609,7 +1000,10 @@ function renderWordList(listName) {
       (item) => `
         <div class="lite-word-row" data-word-select="${item.word}">
           <strong>${item.word}</strong>
-          <button class="inline-audio-button" data-word-audio="${item.word}" aria-label="Play pronunciation for ${item.word}">&#128264;</button>
+          <div class="lite-word-actions">
+            <button class="inline-audio-button" data-word-audio="${item.word}" aria-label="Play pronunciation for ${item.word}">&#128264;</button>
+            <button class="ghost-button small-button" data-delete-word="${item.word}" data-delete-list="${listName}">Delete</button>
+          </div>
         </div>
       `
     )
@@ -634,8 +1028,8 @@ function renderWordList(listName) {
             <button class="ghost-button small-button" data-delete-word="${item.word}" data-delete-list="${listName}">Delete</button>
             ${
               listName === "speaking"
-                ? `<button class="primary-button small-button" data-practice-word="${item.word}">Practice</button>
-                   <button class="ghost-button small-button" data-judge-word="${item.word}">Judge</button>`
+                ? `<button class="primary-button small-button" data-practice-word="${item.word}">Start</button>
+                   <button class="ghost-button small-button" data-judge-word="${item.word}">Finish</button>`
                 : ""
             }
           </div>
@@ -704,16 +1098,27 @@ function getSpeakingReviewWord() {
 function renderSpeakingReview() {
   const item = getSpeakingReviewWord();
   if (!item) return;
+  const isRecordingNow =
+    recordingMode === "speaking-review" || recognitionMode === "speaking-review";
   elements.speakingReviewProgress.textContent = `Speaking word ${state.review.speakingIndex + 1} of ${state.speakingList.length}`;
   elements.speakingReviewWord.textContent = item.word;
   elements.speakingPhonetic.textContent = item.phonetic;
-  elements.speakingPhonetic.classList.add("is-hidden");
-  elements.speakingResult.textContent = state.review.speakingAttempt
-    ? `Latest attempt: "${state.review.speakingAttempt}". Press Let AI Judge to check it.`
-    : "Say the word, then let AI judge it.";
-  elements.startSpeakingReview.textContent = speakingAudioBlob ? "Record Again" : "Start Speaking";
+  elements.speakingPhonetic.classList.toggle("is-hidden", !state.review.speakingJudged);
+  elements.speakingResult.textContent =
+    state.review.speakingStatus || "Say the word clearly, then press Finish.";
+  elements.startSpeakingReview.textContent = isRecordingNow ? "Recording" : "Start";
+  elements.runAiJudge.textContent = isSpeakingReviewProcessing
+    ? "Processing"
+    : state.review.speakingJudged
+      ? "Judged"
+      : "Finish";
+  elements.startSpeakingReview.disabled = isSpeakingReviewProcessing;
+  elements.runAiJudge.disabled =
+    isSpeakingReviewProcessing ||
+    state.review.speakingJudged ||
+    (!isRecordingNow && !speakingAudioBlob && !state.review.speakingAttempt);
   elements.speakingMemoryLine.textContent = `Speaking record: Right ${item.rightCount} times, wrong ${item.wrongCount} times.`;
-  elements.speakingMemoryLine.classList.add("is-hidden");
+  elements.speakingMemoryLine.classList.toggle("is-hidden", !state.review.speakingJudged);
   elements.speakingMeaning.textContent = `Meaning: ${item.meaning}.`;
   elements.speakingExample.textContent = `Example: "${item.example}"`;
 }
@@ -730,7 +1135,9 @@ function renderAll() {
 function startRecognition(mode) {
   if (!SpeechRecognitionApi) {
     if (mode === "today") {
-      elements.micStatus.textContent = "Mic works, speech recognition unsupported";
+      elements.micTestResult.textContent =
+        "Recording works, but this browser does not support live speech recognition.";
+      renderToday();
     } else {
       elements.speakingResult.textContent =
         "Microphone works, but this browser does not support speech recognition.";
@@ -753,8 +1160,10 @@ function startRecognition(mode) {
   activeRecognition = recognition;
 
   recognition.onstart = () => {
-    if (mode === "today") elements.micStatus.textContent = "Listening...";
-    else elements.speakingResult.textContent = "Listening for your pronunciation...";
+    if (mode !== "today") {
+      state.review.speakingStatus = "Recording";
+      renderSpeakingReview();
+    }
   };
 
   recognition.onresult = (event) => {
@@ -766,7 +1175,10 @@ function startRecognition(mode) {
       renderToday();
     } else {
       state.review.speakingAttempt = transcript;
-      elements.speakingResult.textContent = `Latest attempt: "${transcript}". Press Let AI Judge to check it.`;
+      state.review.speakingStatus = transcript
+        ? `Recording: "${transcript}"`
+        : "Recording";
+      renderSpeakingReview();
     }
   };
 
@@ -779,17 +1191,9 @@ function startRecognition(mode) {
     activeRecognition = null;
     recognitionMode = null;
     if (endedMode === "today" && !isTodayRecording) {
-      if (state.transcript.trim()) {
-        elements.micStatus.textContent = "Ready to submit";
-      } else if (dailyAudioBlob) {
-        elements.micStatus.textContent = SpeechRecognitionApi
-          ? "Recording saved"
-          : "Speech recognition unsupported";
-        elements.transcriptText.textContent =
-          "No browser transcript was captured, but your recording is saved. You can still click Submit to AI.";
-      } else {
-        elements.micStatus.textContent = "Microphone ready";
-      }
+      void maybeCompleteTodayPractice();
+    } else if (endedMode === "speaking-review") {
+      void maybeCompleteSpeakingReview();
     }
   };
 
@@ -805,12 +1209,20 @@ async function captureAudio(mode) {
 
   if (mode === "today") {
     isTodayRecording = true;
+    todayAutoSubmitRequested = false;
+    todayPracticeFinished = false;
+    setTodayTranscriptProcessing(false);
     dailyAudioBlob = null;
     state.transcript = "";
+    state.feedback = createEmptyFeedback();
     renderToday();
   } else {
     speakingAudioBlob = null;
     state.review.speakingAttempt = "";
+    state.review.speakingStatus = "Recording";
+    state.review.speakingJudged = false;
+    isSpeakingReviewProcessing = false;
+    speakingReviewAutoJudgeRequested = false;
     renderSpeakingReview();
   }
 
@@ -831,8 +1243,10 @@ async function captureAudio(mode) {
     showToast("Microphone permission was denied.");
     if (mode === "today") {
       isTodayRecording = false;
+      elements.micTestResult.textContent =
+        "Microphone is blocked in browser or system settings.";
       updateTodayRecordingControls();
-      elements.micStatus.textContent = "Microphone blocked";
+      renderToday();
     } else {
       elements.speakingResult.textContent = "Microphone blocked.";
     }
@@ -847,11 +1261,9 @@ async function captureAudio(mode) {
   };
 
   mediaRecorder.onstart = () => {
-    if (mode === "today") {
-      elements.micStatus.textContent = "Recording...";
-    } else {
-      elements.speakingResult.textContent = "Recording...";
-      elements.startSpeakingReview.textContent = "Stop";
+    if (mode !== "today") {
+      state.review.speakingStatus = "Recording";
+      renderSpeakingReview();
     }
   };
 
@@ -859,18 +1271,10 @@ async function captureAudio(mode) {
     const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
     if (mode === "today") {
       dailyAudioBlob = blob;
-      elements.micStatus.textContent = state.transcript.trim()
-        ? "Ready to submit"
-        : "Recording saved";
-      if (!state.transcript.trim() && !SpeechRecognitionApi) {
-        showToast("Recording saved, but this browser still needs speech recognition for Claude analysis.");
-      }
     } else {
       speakingAudioBlob = blob;
-      elements.speakingResult.textContent = apiConfigured
-        ? "Recording ready. Press Let AI Judge."
-        : "Recording ready, but AI is not configured.";
-      elements.startSpeakingReview.textContent = "Record Again";
+      state.review.speakingStatus = "Processing";
+      renderSpeakingReview();
     }
 
     stream.getTracks().forEach((track) => track.stop());
@@ -879,6 +1283,9 @@ async function captureAudio(mode) {
     if (mode === "today") {
       isTodayRecording = false;
       updateTodayRecordingControls();
+      void maybeCompleteTodayPractice();
+    } else {
+      void maybeCompleteSpeakingReview();
     }
   };
 
@@ -893,7 +1300,11 @@ function finishCapture(mode) {
       return;
     }
     isTodayRecording = false;
+    todayAutoSubmitRequested = true;
+    todayPracticeFinished = false;
+    setTodayTranscriptProcessing(true);
     updateTodayRecordingControls();
+    renderToday();
   }
 
   if (activeRecognition && recognitionMode === mode) {
@@ -906,29 +1317,144 @@ function finishCapture(mode) {
   }
 
   if (mode === "today") {
-    elements.micStatus.textContent = state.transcript.trim()
-      ? "Ready to submit"
-      : dailyAudioBlob
-        ? "Recording saved"
-        : "Microphone ready";
-    if (!state.transcript.trim() && dailyAudioBlob) {
-      elements.transcriptText.textContent =
-        "Your recording is saved. If no transcript appears, click Submit to AI and the backend will transcribe it.";
-    }
+    void maybeCompleteTodayPractice();
   } else {
-    elements.startSpeakingReview.textContent = "Record Again";
-    elements.speakingResult.textContent = state.review.speakingAttempt
-      ? `Latest attempt: "${state.review.speakingAttempt}". Press Let AI Judge to check it.`
-      : "Recording finished. Press Let AI Judge.";
+    if (!state.review.speakingAttempt.trim() && !speakingAudioBlob) {
+      showToast("Start speaking first.");
+      state.review.speakingStatus = "Say the word clearly, then press Finish.";
+      renderSpeakingReview();
+      return;
+    }
+    speakingReviewAutoJudgeRequested = true;
+    isSpeakingReviewProcessing = true;
+    state.review.speakingJudged = false;
+    state.review.speakingStatus = "Processing";
+    renderSpeakingReview();
+    void maybeCompleteSpeakingReview();
   }
+}
+
+function restartTodayPractice() {
+  todayTranscribeRequestId += 1;
+  todayAutoSubmitRequested = false;
+  todayPracticeFinished = false;
+  isTodayRecording = false;
+  setTodayTranscriptProcessing(false);
+  dailyAudioBlob = null;
+  state.transcript = "";
+  state.feedback = createEmptyFeedback();
+  saveState();
+  renderAll();
+  showToast("Ready for a new recording.");
+}
+
+async function maybeCompleteSpeakingReview() {
+  if (!speakingReviewAutoJudgeRequested) return;
+  if (recordingMode === "speaking-review" || recognitionMode === "speaking-review") return;
+  const item = getSpeakingReviewWord();
+  if (!item) return;
+  speakingReviewAutoJudgeRequested = false;
+  await judgeSpeakingWord(item.word);
+}
+
+async function saveTodayPracticeToHistory() {
+  const payload = {
+    date: todayPrompt.date,
+    title: todayPrompt.title,
+    summary: state.feedback.correctedTranscript || state.transcript || "",
+    image: todayPrompt.image,
+    originalTranscript: state.transcript,
+    correctedTranscript: state.feedback.correctedTranscript || state.transcript || "",
+  };
+
+  try {
+    const historyResponse = await fetch("/api/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (historyResponse.ok) {
+      const historyData = await historyResponse.json();
+      state.history = historyData.history;
+      return;
+    }
+  } catch {}
+
+  state.history.unshift({
+    id: `hist-${Date.now()}`,
+    ...payload,
+  });
+}
+
+async function processTodayPractice() {
+  if (!state.transcript.trim() && !dailyAudioBlob) {
+    setTodayTranscriptProcessing(false);
+    todayPracticeFinished = false;
+    renderToday();
+    showToast("Please speak first so Claude can analyze your recording.");
+    return;
+  }
+
+  const requestId = ++todayTranscribeRequestId;
+
+  try {
+    if (apiConfigured) {
+      const result = await analyzeWithBackend();
+      if (requestId !== todayTranscribeRequestId) return;
+      if (result) {
+        state.transcript = result.transcript || state.transcript;
+        state.feedback = normalizeFeedback(result.feedback || createEmptyFeedback());
+      }
+    } else if (state.transcript.trim()) {
+      state.feedback = normalizeFeedback(analyzeTranscript(state.transcript));
+      showToast("AI is not configured. Using local feedback.");
+    } else {
+      showToast("Mic works, but Claude needs transcript support in this browser.");
+      return;
+    }
+
+    if (!state.transcript.trim()) {
+      showToast("No transcript was captured from this recording.");
+      return;
+    }
+
+    await saveTodayPracticeToHistory();
+    todayPracticeFinished = true;
+    dailyAudioBlob = null;
+  } catch {
+    if (state.transcript.trim()) {
+      state.feedback = normalizeFeedback(analyzeTranscript(state.transcript));
+      await saveTodayPracticeToHistory();
+      todayPracticeFinished = true;
+      dailyAudioBlob = null;
+      showToast("AI is unavailable. Using local feedback.");
+    } else {
+      todayPracticeFinished = false;
+      showToast("This recording could not be processed.");
+    }
+  } finally {
+    if (requestId === todayTranscribeRequestId) {
+      setTodayTranscriptProcessing(false);
+      saveState();
+      renderAll();
+    }
+  }
+}
+
+async function maybeCompleteTodayPractice() {
+  if (!todayAutoSubmitRequested) return;
+  if (isTodayRecording) return;
+  if (recognitionMode === "today" || recordingMode === "today") return;
+  todayAutoSubmitRequested = false;
+  await processTodayPractice();
 }
 
 async function testMicrophone() {
   if (!navigator.mediaDevices?.getUserMedia) {
     micPermissionGranted = false;
-    elements.micStatus.textContent = "Browser unsupported";
     elements.micTestResult.textContent =
       "This browser does not support microphone capture.";
+    renderToday();
     showToast("Mic test failed.");
     return;
   }
@@ -938,7 +1464,6 @@ async function testMicrophone() {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     micPermissionGranted = true;
     stream.getTracks().forEach((track) => track.stop());
-    elements.micStatus.textContent = apiConfigured ? "Ready to record" : "Mic on, local only";
     elements.micTestResult.textContent = SpeechRecognitionApi
       ? apiConfigured
         ? "Mic permission granted. Speech recognition available. AI available."
@@ -946,12 +1471,13 @@ async function testMicrophone() {
       : apiConfigured
         ? "Mic permission granted. Recording works. Speech recognition unsupported."
         : "Mic permission granted. Recording works. Speech recognition unsupported. AI not configured.";
+    renderToday();
     showToast("Mic test passed.");
   } catch {
     micPermissionGranted = false;
-    elements.micStatus.textContent = "Microphone blocked";
     elements.micTestResult.textContent =
       "Microphone is blocked in browser or system settings.";
+    renderToday();
     showToast("Mic test failed.");
   }
 }
@@ -981,7 +1507,10 @@ async function judgeSpeakingWord(word) {
   if (!item) return;
 
   if (!state.review.speakingAttempt.trim() && !speakingAudioBlob) {
-    elements.speakingResult.textContent = "Say the word first, then let AI judge it.";
+    state.review.speakingStatus = "Say the word clearly, then press Finish.";
+    isSpeakingReviewProcessing = false;
+    state.review.speakingJudged = false;
+    renderSpeakingReview();
     showToast("Please say the word first.");
     return;
   }
@@ -1016,10 +1545,12 @@ async function judgeSpeakingWord(word) {
       }
       saveState();
       renderWordList("speaking");
+      state.review.speakingJudged = true;
+      isSpeakingReviewProcessing = false;
+      state.review.speakingStatus = result.matched
+        ? `AI result: correct pronunciation. Score ${result.score}/100. ${result.feedback}`
+        : `AI result: not correct yet. Score ${result.score}/100. ${result.feedback}`;
       renderSpeakingReview();
-      elements.speakingPhonetic.classList.remove("is-hidden");
-      elements.speakingMemoryLine.classList.remove("is-hidden");
-      elements.speakingResult.textContent = `AI result: ${result.feedback} Score ${result.score}/100.`;
       return;
     } catch {
       showToast("AI judge failed. Using local fallback.");
@@ -1046,12 +1577,12 @@ async function judgeSpeakingWord(word) {
   }
   saveState();
   renderWordList("speaking");
+  state.review.speakingJudged = true;
+  isSpeakingReviewProcessing = false;
+  state.review.speakingStatus = correct
+    ? `AI result: correct pronunciation. Score 90/100.`
+    : `AI result: not correct yet. Score 58/100. Try the ending sound again.`;
   renderSpeakingReview();
-  elements.speakingPhonetic.classList.remove("is-hidden");
-  elements.speakingMemoryLine.classList.remove("is-hidden");
-  elements.speakingResult.textContent = correct
-    ? `AI result: good pronunciation. Score 90/100.`
-    : `AI result: not clear enough yet. Score 58/100. Try the ending sound again.`;
 }
 
 document.querySelectorAll(".nav-link").forEach((button) => {
@@ -1092,6 +1623,83 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
 });
 
 document.addEventListener("click", (event) => {
+  const audioButton = event.target.closest("[data-word-audio]");
+  if (audioButton) {
+    speakWord(audioButton.dataset.wordAudio);
+    return;
+  }
+
+  const historyDeleteButton = event.target.closest("[data-history-delete]");
+  if (historyDeleteButton) {
+    event.stopPropagation();
+    deleteHistory(historyDeleteButton.dataset.historyDelete);
+    return;
+  }
+
+  const historyCard = event.target.closest("[data-history-open]");
+  if (historyCard) {
+    openHistoryPreview(historyCard.dataset.historyOpen);
+    return;
+  }
+
+  const exampleAudioButton = event.target.closest("[data-example-audio]");
+  if (exampleAudioButton) {
+    const text =
+      exampleAudioButton.dataset.exampleAudio === "advanced"
+        ? elements.modelAdvancedText.textContent
+        : elements.modelEasyText.textContent;
+    speakText(text);
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-delete-word]");
+  if (deleteButton) {
+    event.stopPropagation();
+    removeWordFromList(deleteButton.dataset.deleteWord, deleteButton.dataset.deleteList);
+    return;
+  }
+
+  const practiceButton = event.target.closest("[data-practice-word]");
+  if (practiceButton) {
+    event.stopPropagation();
+    state.review.speakingIndex = state.speakingList.findIndex(
+      (item) => item.word === practiceButton.dataset.practiceWord
+    );
+    state.review.speakingAttempt = "";
+    state.review.speakingStatus = "Say the word clearly, then press Finish.";
+    state.review.speakingJudged = false;
+    isSpeakingReviewProcessing = false;
+    speakingAudioBlob = null;
+    saveState();
+    renderSpeakingReview();
+    showToast(`Start "${practiceButton.dataset.practiceWord}"`);
+    return;
+  }
+
+  const judgeButton = event.target.closest("[data-judge-word]");
+  if (judgeButton) {
+    event.stopPropagation();
+    const word = judgeButton.dataset.judgeWord;
+    state.review.speakingIndex = state.speakingList.findIndex((item) => item.word === word);
+    state.review.speakingAttempt = "";
+    state.review.speakingStatus = "Say the word clearly, then press Finish.";
+    state.review.speakingJudged = false;
+    isSpeakingReviewProcessing = false;
+    speakingAudioBlob = null;
+    document.querySelectorAll(".nav-link").forEach((item) => item.classList.remove("is-active"));
+    Object.values(elements.views).forEach((view) => view.classList.remove("is-visible"));
+    document.querySelector('.nav-link[data-view="settings"]').classList.add("is-active");
+    elements.views.settings.classList.add("is-visible");
+    document.querySelectorAll("[data-review-tab]").forEach((item) => {
+      item.classList.toggle("is-active", item.dataset.reviewTab === "speaking");
+    });
+    document.querySelectorAll(".review-tab").forEach((tab) => tab.classList.remove("is-visible"));
+    document.getElementById("review-tab-speaking").classList.add("is-visible");
+    renderSpeakingReview();
+    showToast(`Finish "${word}" in Review`);
+    return;
+  }
+
   const wordButton = event.target.closest("[data-word-select]");
   if (wordButton) {
     const word = wordButton.dataset.wordSelect;
@@ -1108,52 +1716,23 @@ document.addEventListener("click", (event) => {
     }
     return;
   }
-
-  const audioButton = event.target.closest("[data-word-audio]");
-  if (audioButton) {
-    speakWord(audioButton.dataset.wordAudio);
-    return;
-  }
-
-  const deleteButton = event.target.closest("[data-delete-word]");
-  if (deleteButton) {
-    removeWordFromList(deleteButton.dataset.deleteWord, deleteButton.dataset.deleteList);
-    return;
-  }
-
-  const practiceButton = event.target.closest("[data-practice-word]");
-  if (practiceButton) {
-    state.review.speakingIndex = state.speakingList.findIndex(
-      (item) => item.word === practiceButton.dataset.practiceWord
-    );
-    saveState();
-    renderSpeakingReview();
-    showToast(`Practice "${practiceButton.dataset.practiceWord}"`);
-    return;
-  }
-
-  const judgeButton = event.target.closest("[data-judge-word]");
-  if (judgeButton) {
-    const word = judgeButton.dataset.judgeWord;
-    state.review.speakingIndex = state.speakingList.findIndex((item) => item.word === word);
-    state.review.speakingAttempt = "";
-    document.querySelectorAll(".nav-link").forEach((item) => item.classList.remove("is-active"));
-    Object.values(elements.views).forEach((view) => view.classList.remove("is-visible"));
-    document.querySelector('.nav-link[data-view="settings"]').classList.add("is-active");
-    elements.views.settings.classList.add("is-visible");
-    document.querySelectorAll("[data-review-tab]").forEach((item) => {
-      item.classList.toggle("is-active", item.dataset.reviewTab === "speaking");
-    });
-    document.querySelectorAll(".review-tab").forEach((tab) => tab.classList.remove("is-visible"));
-    document.getElementById("review-tab-speaking").classList.add("is-visible");
-    renderSpeakingReview();
-    showToast(`Ready to judge "${word}" in Review`);
-    return;
-  }
 });
 
 document.addEventListener("keydown", async (event) => {
   const key = event.key.toLowerCase();
+  const historyCard = document.activeElement?.closest?.("[data-history-open]");
+
+  if ((key === "enter" || key === " ") && historyCard) {
+    event.preventDefault();
+    openHistoryPreview(historyCard.dataset.historyOpen);
+    return;
+  }
+
+  if (event.key === "Escape" && activeHistoryPreviewId) {
+    closeHistoryPreview();
+    return;
+  }
+
   if (key === "r" && selectedWord) await saveWordToList(selectedWord, "reading");
   if (key === "s" && selectedWord) await saveWordToList(selectedWord, "speaking");
 });
@@ -1161,86 +1740,7 @@ document.addEventListener("keydown", async (event) => {
 elements.startSpeakingButton.addEventListener("click", () => captureAudio("today"));
 elements.finishSpeakingButton.addEventListener("click", () => finishCapture("today"));
 elements.testMicButton.addEventListener("click", () => testMicrophone());
-elements.retryButton.addEventListener("click", () => {
-  if (activeRecognition && recognitionMode === "today") activeRecognition.stop();
-  if (mediaRecorder && recordingMode === "today") mediaRecorder.stop();
-  isTodayRecording = false;
-  state.transcript = "";
-  dailyAudioBlob = null;
-  state.feedback = analyzeTranscript("");
-  saveState();
-  renderToday();
-});
-elements.submitButton.addEventListener("click", async () => {
-  if (isTodayRecording) {
-    showToast("Finish speaking first, then submit to AI.");
-    return;
-  }
-
-  if (!state.transcript.trim() && !dailyAudioBlob) {
-    showToast("Please speak first so Claude can analyze your recording.");
-    return;
-  }
-
-  if (!apiConfigured && dailyAudioBlob && !state.transcript) {
-    showToast("Mic works, but Claude needs browser transcript text first.");
-    return;
-  }
-
-  try {
-    const result = await analyzeWithBackend();
-    if (result) {
-      state.transcript = result.transcript;
-      state.feedback = result.feedback;
-    } else {
-      state.feedback = analyzeTranscript(state.transcript);
-    }
-  } catch {
-    state.feedback = analyzeTranscript(state.transcript);
-    showToast("AI is not configured or unavailable. Using local fallback.");
-  }
-
-  if (!state.transcript && dailyAudioBlob && !apiConfigured) {
-    showToast("Recording exists, but Claude mode still needs browser transcript text.");
-  }
-
-  try {
-    const historyResponse = await fetch("/api/history", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: todayPrompt.date,
-        title: "Street market practice",
-        summary: state.feedback.correctedTranscript,
-        image: todayPrompt.image,
-      }),
-    });
-    if (historyResponse.ok) {
-      const historyData = await historyResponse.json();
-      state.history = historyData.history;
-    } else {
-      state.history.unshift({
-        id: `hist-${Date.now()}`,
-        date: todayPrompt.date,
-        title: "Street market practice",
-        summary: state.feedback.correctedTranscript,
-        image: todayPrompt.image,
-      });
-    }
-  } catch {
-    state.history.unshift({
-      id: `hist-${Date.now()}`,
-      date: todayPrompt.date,
-      title: "Street market practice",
-      summary: state.feedback.correctedTranscript,
-      image: todayPrompt.image,
-    });
-  }
-  dailyAudioBlob = null;
-  saveState();
-  renderAll();
-  showToast("Practice saved to History");
-});
+elements.restartSpeakingButton.addEventListener("click", () => restartTodayPractice());
 
 elements.historySearch.addEventListener("input", () => {
   historyPage = 1;
@@ -1276,6 +1776,9 @@ document.getElementById("jump-today-history").addEventListener("click", () => {
   elements.historyDate.value = "";
   elements.monthButtons.forEach((item) => item.classList.toggle("is-active", item.dataset.month === "all"));
   renderHistory();
+});
+elements.deleteAllHistory.addEventListener("click", () => {
+  deleteAllHistory();
 });
 
 elements.vocabularySearch.addEventListener("input", () => {
@@ -1348,32 +1851,34 @@ elements.readingReviewAudio.addEventListener("click", () => {
 
 elements.startSpeakingReview.addEventListener("click", () => {
   if (mediaRecorder && recordingMode === "speaking-review") {
-    finishCapture("speaking-review");
+    showToast("Press Finish to stop and judge this word.");
     return;
   }
   if (activeRecognition && recognitionMode === "speaking-review") {
-    finishCapture("speaking-review");
+    showToast("Press Finish to stop and judge this word.");
     return;
   }
   captureAudio("speaking-review");
 });
 elements.runAiJudge.addEventListener("click", async () => {
-  const item = getSpeakingReviewWord();
-  if (!item) return;
-  if (!apiConfigured && speakingAudioBlob && !state.review.speakingAttempt) {
-    showToast("AI is not configured yet.");
-    return;
-  }
-  await judgeSpeakingWord(item.word);
+  finishCapture("speaking-review");
 });
 elements.speakingReviewPrev.addEventListener("click", () => {
   if (state.review.speakingIndex > 0) state.review.speakingIndex -= 1;
   state.review.speakingAttempt = "";
+  state.review.speakingStatus = "Say the word clearly, then press Finish.";
+  state.review.speakingJudged = false;
+  isSpeakingReviewProcessing = false;
+  speakingAudioBlob = null;
   renderSpeakingReview();
 });
 elements.speakingReviewNext.addEventListener("click", () => {
   if (state.review.speakingIndex < state.speakingList.length - 1) state.review.speakingIndex += 1;
   state.review.speakingAttempt = "";
+  state.review.speakingStatus = "Say the word clearly, then press Finish.";
+  state.review.speakingJudged = false;
+  isSpeakingReviewProcessing = false;
+  speakingAudioBlob = null;
   renderSpeakingReview();
 });
 elements.speakingReviewAudio.addEventListener("click", () => {
@@ -1391,6 +1896,17 @@ elements.addReading.addEventListener("click", () => {
 });
 elements.addSpeaking.addEventListener("click", () => {
   if (elements.drawer.dataset.word) saveWordToList(elements.drawer.dataset.word, "speaking");
+});
+elements.closeHistoryPreview.addEventListener("click", () => {
+  closeHistoryPreview();
+});
+elements.deleteHistoryEntry.addEventListener("click", () => {
+  if (activeHistoryPreviewId) deleteHistory(activeHistoryPreviewId);
+});
+elements.historyPreviewBackdrop.addEventListener("click", (event) => {
+  if (event.target === elements.historyPreviewBackdrop) {
+    closeHistoryPreview();
+  }
 });
 
 Promise.all([checkApiHealth(), loadBootstrap()]).finally(renderAll);

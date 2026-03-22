@@ -20,6 +20,7 @@ async function main() {
   await testReviewCounters();
   await testJudgeWord();
   await testHistoryCreate();
+  await testHistoryDelete();
 
   await cleanup();
   console.log("System test passed.");
@@ -159,15 +160,34 @@ async function testHistoryCreate() {
       date: "2026-03-20",
       title: historyTitle,
       summary: "Automated test saved a history entry.",
+      originalTranscript: "This picture show a busy night market.",
+      correctedTranscript: "This picture shows a busy night market.",
       image:
         "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1200&q=80",
     }),
   });
   assert(response.ok, "History create should succeed.");
   const data = await response.json();
+  const entry = data.history.find((item) => item.title === historyTitle);
+  assert(entry, "Created history entry should exist.");
+  assert(entry.originalTranscript === "This picture show a busy night market.", "History should store original transcript.");
+  assert(entry.correctedTranscript === "This picture shows a busy night market.", "History should store corrected transcript.");
+}
+
+async function testHistoryDelete() {
+  let response = await fetch(`${baseUrl}/api/bootstrap`);
+  let data = await response.json();
+  const entry = data.history.find((item) => item.title === historyTitle);
+  assert(entry, "History entry should still exist before delete.");
+
+  response = await fetch(`${baseUrl}/api/history/${encodeURIComponent(entry.id)}`, {
+    method: "DELETE",
+  });
+  assert(response.ok, "History delete should succeed.");
+  data = await response.json();
   assert(
-    data.history.some((entry) => entry.title === historyTitle),
-    "Created history entry should exist."
+    !data.history.some((item) => item.id === entry.id),
+    "Deleted history entry should be removed."
   );
 }
 
