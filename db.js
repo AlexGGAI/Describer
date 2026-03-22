@@ -41,7 +41,8 @@ db.exec(`
     date TEXT NOT NULL,
     title TEXT NOT NULL,
     summary TEXT NOT NULL,
-    image TEXT NOT NULL
+    image TEXT NOT NULL,
+    score INTEGER NOT NULL DEFAULT 89
   );
 `);
 
@@ -90,14 +91,15 @@ export function updateReviewCount(listName, word, matched) {
 
 export function addHistoryEntry(entry) {
   db.prepare(
-    `INSERT INTO history (id, date, title, summary, image, original_transcript, corrected_transcript)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO history (id, date, title, summary, image, score, original_transcript, corrected_transcript)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     entry.id,
     entry.date,
     entry.title,
     entry.summary,
     entry.image,
+    entry.score ?? 89,
     entry.originalTranscript || "",
     entry.correctedTranscript || ""
   );
@@ -130,6 +132,7 @@ function getHistory() {
   return db
     .prepare(
       `SELECT id, date, title, summary, image,
+              score,
               original_transcript as originalTranscript,
               corrected_transcript as correctedTranscript
        FROM history
@@ -146,6 +149,9 @@ function ensureHistoryColumns() {
   }
   if (!names.has("corrected_transcript")) {
     db.exec("ALTER TABLE history ADD COLUMN corrected_transcript TEXT NOT NULL DEFAULT ''");
+  }
+  if (!names.has("score")) {
+    db.exec("ALTER TABLE history ADD COLUMN score INTEGER NOT NULL DEFAULT 89");
   }
 }
 
@@ -201,8 +207,8 @@ function seedAppDataIfNeeded() {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertHistory = db.prepare(
-    `INSERT INTO history (id, date, title, summary, image, original_transcript, corrected_transcript)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO history (id, date, title, summary, image, score, original_transcript, corrected_transcript)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const tx = db.transaction(() => {
@@ -237,6 +243,7 @@ function seedAppDataIfNeeded() {
         item.title,
         item.summary,
         item.image,
+        item.score ?? 89,
         item.originalTranscript || "",
         item.correctedTranscript || ""
       );

@@ -60,6 +60,7 @@ const seedHistory = [
     date: "2026-03-18",
     title: "Cafe conversation",
     summary: "You described relationships, body language, and a relaxed indoor atmosphere.",
+    score: 89,
     image:
       "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=800&q=80",
   },
@@ -68,6 +69,7 @@ const seedHistory = [
     date: "2026-03-17",
     title: "Beach sunset",
     summary: "Practice focused on scenery words, emotions, and fluid spoken descriptions.",
+    score: 91,
     image:
       "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
   },
@@ -76,6 +78,7 @@ const seedHistory = [
     date: "2026-03-16",
     title: "Library study hour",
     summary: "Good correction set for singular/plural grammar and clearer pronunciation.",
+    score: 87,
     image:
       "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=800&q=80",
   },
@@ -84,6 +87,7 @@ const seedHistory = [
     date: "2026-02-24",
     title: "Rainy city walk",
     summary: "Focused on weather vocabulary, movement verbs, and clearer speaking.",
+    score: 89,
     image:
       "https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=800&q=80",
   },
@@ -92,6 +96,7 @@ const seedHistory = [
     date: "2026-02-10",
     title: "Cooking at home",
     summary: "Practiced food descriptions, actions in progress, and sentence linking.",
+    score: 86,
     image:
       "https://images.unsplash.com/photo-1504754524776-8f4f37790ca0?auto=format&fit=crop&w=800&q=80",
   },
@@ -100,6 +105,7 @@ const seedHistory = [
     date: "2026-01-28",
     title: "Station commute",
     summary: "Good practice for travel expressions, location words, and pronunciation.",
+    score: 88,
     image:
       "https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=800&q=80",
   },
@@ -118,32 +124,22 @@ function createWord(word, savedAt, rightCount = 0, wrongCount = 0) {
 
 function createDefaultState() {
   return {
-    transcript:
-      "I think this picture show a busy market. Many people is walking and some seller are smiling. The fruits look very fresh and the street feels lively.",
-    feedback: analyzeTranscript(
-      "I think this picture show a busy market. Many people is walking and some seller are smiling. The fruits look very fresh and the street feels lively."
-    ),
-    readingList: [
-      createWord("vendor", "2026-03-20", 3, 1),
-      createWord("atmosphere", "2026-03-20", 2, 2),
-      createWord("fresh produce", "2026-03-18", 1, 2),
-      createWord("market", "2026-03-17", 4, 0),
-      createWord("crowded", "2026-03-16", 1, 3),
-    ],
-    speakingList: [
-      createWord("lively", "2026-03-20", 2, 3),
-      createWord("seller", "2026-03-16", 1, 4),
-      createWord("atmosphere", "2026-03-14", 3, 1),
-      createWord("vendor", "2026-03-12", 2, 2),
-    ],
-    history: seedHistory,
+    transcript: "",
+    feedback: createEmptyFeedback(),
+    readingList: [],
+    speakingList: [],
+    history: [],
     review: {
+      readingActive: false,
       readingQueue: [],
       readingIndex: 0,
+      readingChoice: null,
       readingPending: null,
+      speakingActive: false,
+      speakingQueue: [],
       speakingIndex: 0,
       speakingAttempt: "",
-      speakingStatus: "Say the word clearly, then press Finish.",
+      speakingStatus: "Ready",
       speakingJudged: false,
     },
   };
@@ -152,12 +148,24 @@ function createDefaultState() {
 let state = createDefaultState();
 let selectedWord = null;
 let selectedWordElement = null;
-let currentMonth = "all";
+let historyFilterMode = "all";
+let historyYear = todayPrompt.date.slice(0, 4);
+let historyMonth = todayPrompt.date.slice(5, 7);
 let historyPage = 1;
 let readingPage = 1;
 let speakingPage = 1;
+let selectedHistoryIds = new Set();
+let currentFilteredHistoryIds = [];
+let historyCardMode = "full";
+let selectedReadingWordIds = new Set();
+let selectedSpeakingWordIds = new Set();
+let currentFilteredReadingWords = [];
+let currentFilteredSpeakingWords = [];
+let activeTodayHistoryId = null;
+let todayLiveSnapshot = null;
 const pageSize = 3;
-const listPageSize = 4;
+const liteListPageSize = 10;
+const fullListPageSize = 3;
 let activeRecognition = null;
 let recognitionMode = null;
 let apiConfigured = false;
@@ -166,6 +174,8 @@ let recordingMode = null;
 let dailyAudioBlob = null;
 let speakingAudioBlob = null;
 let micPermissionGranted = false;
+let playbackAudio = null;
+let playbackAudioUrl = null;
 let isTodayRecording = false;
 let isTodayTranscriptProcessing = false;
 let todayTranscribeRequestId = 0;
@@ -174,6 +184,18 @@ let todayPracticeFinished = false;
 let speakingReviewAutoJudgeRequested = false;
 let isSpeakingReviewProcessing = false;
 let activeHistoryPreviewId = null;
+let readingSessionResults = new Map();
+let speakingSessionResults = new Map();
+let reviewSummary = null;
+let speakingListPractice = {
+  word: null,
+  attempt: "",
+  judged: false,
+  score: null,
+};
+let speakingListAudioBlob = null;
+let speakingListAutoJudgeRequested = false;
+let isSpeakingListProcessing = false;
 
 const elements = {
   views: {
@@ -184,6 +206,7 @@ const elements = {
     settings: document.getElementById("view-settings"),
   },
   todayDate: document.getElementById("today-date"),
+  backToTodayButton: document.getElementById("back-to-today"),
   dailyImage: document.getElementById("daily-image"),
   dailyPromptTitle: document.getElementById("daily-prompt-title"),
   startSpeakingButton: document.getElementById("start-speaking-button"),
@@ -192,6 +215,7 @@ const elements = {
   transcriptProcessing: document.getElementById("transcript-processing"),
   testMicButton: document.getElementById("test-mic-button"),
   restartSpeakingButton: document.getElementById("restart-speaking-button"),
+  playOriginalSpeakingButton: document.getElementById("play-original-speaking"),
   micTestResult: document.getElementById("mic-test-result"),
   feedbackOriginalTranscript: document.getElementById("feedback-original-transcript"),
   grammarSentences: document.getElementById("grammar-sentences"),
@@ -200,13 +224,20 @@ const elements = {
   modelAdvancedText: document.getElementById("model-advanced-text"),
   modelToggleRow: document.getElementById("model-toggle-row"),
   modelLockedNote: document.getElementById("model-locked-note"),
+  aiSuggestionScore: document.getElementById("ai-suggestion-score"),
   aiSuggestionText: document.getElementById("ai-suggestion-text"),
   keywordGrid: document.getElementById("keyword-grid"),
   recentSavedList: document.getElementById("recent-saved-list"),
   historySearch: document.getElementById("history-search"),
   historyDate: document.getElementById("history-date"),
-  monthButtons: Array.from(document.querySelectorAll(".month-pill")),
-  monthSummaryTitle: document.getElementById("month-summary-title"),
+  selectAllHistoryButton: document.getElementById("select-all-history"),
+  historyAllButton: document.getElementById("history-all-button"),
+  historyMonthModeButton: document.getElementById("history-month-mode"),
+  historyDateModeButton: document.getElementById("history-date-mode"),
+  historyMonthControls: document.getElementById("history-month-controls"),
+  historyDateControls: document.getElementById("history-date-controls"),
+  historyYear: document.getElementById("history-year"),
+  historyMonth: document.getElementById("history-month"),
   monthSessionCount: document.getElementById("month-session-count"),
   historyGrid: document.getElementById("history-grid"),
   deleteAllHistory: document.getElementById("delete-all-history"),
@@ -215,6 +246,8 @@ const elements = {
   historyPageStatus: document.getElementById("history-page-status"),
   vocabularySearch: document.getElementById("vocabulary-search"),
   vocabularySort: document.getElementById("vocabulary-sort"),
+  selectAllReadingButton: document.getElementById("select-all-reading"),
+  deleteSelectedReadingButton: document.getElementById("delete-selected-reading"),
   vocabularyLiteList: document.getElementById("vocabulary-lite-list"),
   vocabularyFullPanel: document.getElementById("vocabulary-full-panel"),
   vocabularyPrev: document.getElementById("vocabulary-prev"),
@@ -222,6 +255,8 @@ const elements = {
   vocabularyPageStatus: document.getElementById("vocabulary-page-status"),
   speakingSearch: document.getElementById("speaking-search"),
   speakingSort: document.getElementById("speaking-sort"),
+  selectAllSpeakingButton: document.getElementById("select-all-speaking"),
+  deleteSelectedSpeakingButton: document.getElementById("delete-selected-speaking"),
   speakingLiteList: document.getElementById("speaking-lite-list"),
   speakingFullPanel: document.getElementById("speaking-full-panel"),
   speakingPrev: document.getElementById("speaking-prev"),
@@ -229,6 +264,8 @@ const elements = {
   speakingPageStatus: document.getElementById("speaking-page-status"),
   readingReviewCount: document.getElementById("review-word-count"),
   startReadingReview: document.getElementById("start-reading-review"),
+  finishReadingReview: document.getElementById("finish-reading-review"),
+  readingReviewCard: document.getElementById("reading-review-card"),
   reviewYes: document.getElementById("review-yes"),
   reviewNo: document.getElementById("review-no"),
   readingReviewWrong: document.getElementById("reading-review-wrong"),
@@ -238,13 +275,16 @@ const elements = {
   readingReviewAudio: document.getElementById("reading-review-audio"),
   readingReviewMeaningPanel: document.getElementById("review-meaning-panel"),
   readingReviewMeaning: document.getElementById("reading-review-meaning"),
-  readingReviewMemory: document.getElementById("reading-review-memory"),
+  readingReviewExample: document.getElementById("reading-review-example"),
   readingReviewPrev: document.getElementById("reading-review-prev"),
   readingReviewNext: document.getElementById("reading-review-next"),
+  speakingReviewCount: document.getElementById("speaking-review-count"),
+  startSpeakingSession: document.getElementById("start-speaking-session"),
+  finishSpeakingSession: document.getElementById("finish-speaking-session"),
+  speakingReviewCard: document.getElementById("speaking-review-card"),
   speakingReviewProgress: document.getElementById("speaking-review-progress"),
   speakingReviewWord: document.getElementById("speaking-review-word"),
   speakingReviewAudio: document.getElementById("speaking-review-audio"),
-  speakingReviewHelper: document.getElementById("speaking-review-helper"),
   speakingPhonetic: document.getElementById("speaking-phonetic"),
   speakingResult: document.getElementById("speaking-review-result"),
   speakingMemoryLine: document.getElementById("speaking-memory-line"),
@@ -252,6 +292,8 @@ const elements = {
   speakingExample: document.getElementById("speaking-review-example"),
   startSpeakingReview: document.getElementById("start-speaking-review"),
   runAiJudge: document.getElementById("run-ai-judge"),
+  retrySpeakingReview: document.getElementById("retry-speaking-review"),
+  originalSpeakingReview: document.getElementById("original-speaking-review"),
   speakingReviewPrev: document.getElementById("speaking-review-prev"),
   speakingReviewNext: document.getElementById("speaking-review-next"),
   drawer: document.getElementById("word-drawer"),
@@ -271,8 +313,16 @@ const elements = {
   historyPreviewSummary: document.getElementById("history-preview-summary"),
   historyPreviewOriginal: document.getElementById("history-preview-original"),
   historyPreviewCorrected: document.getElementById("history-preview-corrected"),
+  openHistoryDetails: document.getElementById("open-history-details"),
   closeHistoryPreview: document.getElementById("close-history-preview"),
   deleteHistoryEntry: document.getElementById("delete-history-entry"),
+  reviewSummaryBackdrop: document.getElementById("review-summary-backdrop"),
+  reviewSummaryModal: document.getElementById("review-summary-modal"),
+  reviewSummaryType: document.getElementById("review-summary-type"),
+  reviewSummaryRight: document.getElementById("review-summary-right"),
+  reviewSummaryWrong: document.getElementById("review-summary-wrong"),
+  reviewSummaryRate: document.getElementById("review-summary-rate"),
+  closeReviewSummary: document.getElementById("close-review-summary"),
   shortcutToast: document.getElementById("shortcut-toast"),
 };
 
@@ -315,20 +365,152 @@ function formatDateLabel(dateString) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function formatMonthLabel(month) {
-  if (month === "all") return "All Months";
-  const [year, number] = month.split("-");
-  const date = new Date(Number(year), Number(number) - 1, 1);
+function formatHistoryMonthLabel(year, month) {
+  const date = new Date(Number(year), Number(month) - 1, 1);
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function buildHistoryYearOptions() {
+  const historyYears = state.history
+    .map((entry) => Number(String(entry.date || "").slice(0, 4)))
+    .filter((value) => Number.isFinite(value));
+  const todayYear = Number(todayPrompt.date.slice(0, 4));
+  const minYear = Math.min(...historyYears, todayYear - 1);
+  const maxYear = Math.max(...historyYears, todayYear + 4);
+  const years = [];
+  for (let year = maxYear; year >= minYear; year -= 1) years.push(String(year));
+  return years;
+}
+
+function renderHistoryFilterControls() {
+  const yearOptions = buildHistoryYearOptions();
+  if (!yearOptions.includes(historyYear)) {
+    historyYear = yearOptions[0] || todayPrompt.date.slice(0, 4);
+  }
+
+  elements.historyYear.innerHTML = yearOptions
+    .map((year) => `<option value="${year}">${year}</option>`)
+    .join("");
+  elements.historyYear.value = historyYear;
+  elements.historyMonth.value = historyMonth;
+  elements.historyAllButton.classList.toggle("is-active", historyFilterMode === "all");
+  elements.historyMonthModeButton.classList.toggle("is-active", historyFilterMode === "month");
+  elements.historyDateModeButton.classList.toggle("is-active", historyFilterMode === "date");
+  elements.historyMonthControls.classList.toggle("is-hidden", historyFilterMode !== "month");
+  elements.historyDateControls.classList.toggle("is-hidden", historyFilterMode !== "date");
+  document.querySelectorAll("[data-history-card-mode]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.historyCardMode === historyCardMode);
+  });
+}
+
+function clearHistorySelection() {
+  selectedHistoryIds.clear();
+}
+
+function getSelectedHistoryIds() {
+  return [...selectedHistoryIds].filter((id) => state.history.some((entry) => entry.id === id));
+}
+
+function toggleHistorySelection(id, checked) {
+  if (checked) selectedHistoryIds.add(id);
+  else selectedHistoryIds.delete(id);
+  renderHistory();
+}
+
+function areAllFilteredHistorySelected() {
+  return (
+    currentFilteredHistoryIds.length > 0 &&
+    currentFilteredHistoryIds.every((id) => selectedHistoryIds.has(id))
+  );
+}
+
+function selectAllFilteredHistory() {
+  if (!currentFilteredHistoryIds.length) {
+    showToast("No history in this view.");
+    return;
+  }
+  if (areAllFilteredHistorySelected()) {
+    currentFilteredHistoryIds.forEach((id) => selectedHistoryIds.delete(id));
+  } else {
+    currentFilteredHistoryIds.forEach((id) => selectedHistoryIds.add(id));
+  }
+  renderHistory();
+}
+
+function getWordListLabel(listName) {
+  return listName === "reading" ? "Reading" : "Speaking";
+}
+
+function getWordListKey(listName) {
+  return listName === "reading" ? "readingList" : "speakingList";
+}
+
+function getActiveWordMode(listName) {
+  return document.getElementById(`${listName}-lite-panel`)?.classList.contains("is-visible")
+    ? "lite"
+    : "full";
+}
+
+function getSelectedWordSet(listName) {
+  return listName === "reading" ? selectedReadingWordIds : selectedSpeakingWordIds;
+}
+
+function setCurrentFilteredWords(listName, words) {
+  if (listName === "reading") currentFilteredReadingWords = words;
+  else currentFilteredSpeakingWords = words;
+}
+
+function getCurrentFilteredWords(listName) {
+  return listName === "reading" ? currentFilteredReadingWords : currentFilteredSpeakingWords;
+}
+
+function clearWordSelection(listName) {
+  getSelectedWordSet(listName).clear();
+}
+
+function getSelectedWords(listName) {
+  const selected = getSelectedWordSet(listName);
+  const listKey = getWordListKey(listName);
+  return [...selected].filter((word) => state[listKey].some((item) => item.word === word));
+}
+
+function toggleWordSelection(listName, word, checked) {
+  const selected = getSelectedWordSet(listName);
+  if (checked) selected.add(word);
+  else selected.delete(word);
+  renderWordList(listName);
+}
+
+function areAllFilteredWordsSelected(listName) {
+  const filteredWords = getCurrentFilteredWords(listName);
+  const selected = getSelectedWordSet(listName);
+  return filteredWords.length > 0 && filteredWords.every((word) => selected.has(word));
+}
+
+function selectAllFilteredWords(listName) {
+  const filteredWords = getCurrentFilteredWords(listName);
+  if (!filteredWords.length) {
+    showToast(`No ${getWordListLabel(listName).toLowerCase()} words in this view.`);
+    return;
+  }
+
+  const selected = getSelectedWordSet(listName);
+  if (areAllFilteredWordsSelected(listName)) {
+    filteredWords.forEach((word) => selected.delete(word));
+  } else {
+    filteredWords.forEach((word) => selected.add(word));
+  }
+  renderWordList(listName);
 }
 
 function normalized(value) {
   return value.toLowerCase().replace(/[^\w\s]/g, "").trim();
 }
 
-function analyzeTranscript(text) {
+function analyzeTranscript(text, prompt = todayPrompt) {
   const original = text || "";
   let corrected = original;
+  let grammarIssueCount = 0;
   const fixes = [
     {
       from: /\bpicture show\b/i,
@@ -358,14 +540,24 @@ function analyzeTranscript(text) {
     if (fix.from.test(corrected)) {
       corrected = corrected.replace(fix.from, fix.to);
       selectedFix = fix;
+      grammarIssueCount += 1;
       break;
     }
   }
-  corrected = corrected.replace(/\bpeople is\b/i, "people are");
-  corrected = corrected.replace(/\bseller are\b/i, "sellers are");
+  if (/\bpeople is\b/i.test(corrected)) {
+    corrected = corrected.replace(/\bpeople is\b/i, "people are");
+    grammarIssueCount += 1;
+  }
+  if (/\bseller are\b/i.test(corrected)) {
+    corrected = corrected.replace(/\bseller are\b/i, "sellers are");
+    grammarIssueCount += 1;
+  }
 
   const flagged = Object.keys(wordLibrary).filter((word) =>
     normalized(original).includes(normalized(word))
+  );
+  const overallScore = clampScore(
+    96 - grammarIssueCount * 2 - Math.max(Math.min(flagged.length, 3) - 2, 0)
   );
 
   return {
@@ -375,24 +567,148 @@ function analyzeTranscript(text) {
     overallSuggestion:
       "Good detail. Next time, slow down a little and keep each sentence shorter so your grammar stays clear.",
     correctedTranscript: corrected,
+    overallScore,
     pronunciationWords: flagged.slice(0, 3).length ? flagged.slice(0, 3) : ["seller", "lively"],
-    keywords: todayPrompt.keywords,
-    easy: buildEasyExample(todayPrompt),
-    advanced: buildAdvancedExample(todayPrompt),
+    keywords: prompt.keywords?.length ? prompt.keywords : deriveKeywordsFromText(original, prompt.title),
+    easy: buildEasyExample(prompt),
+    advanced: buildAdvancedExample(prompt),
   };
 }
 
-function createEmptyFeedback() {
+function createEmptyFeedback(prompt = todayPrompt) {
   return {
     grammarOriginal: "",
     grammarCorrected: "",
     grammarNote: "",
-    overallSuggestion: "AI suggestions will appear here after your recording is judged.",
+    overallSuggestion: "",
     correctedTranscript: "",
+    overallScore: null,
     pronunciationWords: [],
-    keywords: todayPrompt.keywords,
-    easy: buildEasyExample(todayPrompt),
-    advanced: buildAdvancedExample(todayPrompt),
+    keywords: [],
+    easy: "",
+    advanced: "",
+  };
+}
+
+function clonePrompt(prompt = todayPrompt) {
+  return {
+    ...prompt,
+    keywords: [...(prompt.keywords || [])],
+  };
+}
+
+function cloneFeedback(feedback = createEmptyFeedback()) {
+  return JSON.parse(JSON.stringify(feedback));
+}
+
+function deriveKeywordsFromText(text, title = "") {
+  const stopWords = new Set([
+    "this",
+    "that",
+    "with",
+    "from",
+    "have",
+    "there",
+    "their",
+    "about",
+    "would",
+    "could",
+    "should",
+    "because",
+    "people",
+    "picture",
+    "looks",
+    "look",
+    "very",
+    "some",
+    "into",
+    "after",
+    "before",
+    "again",
+    "while",
+  ]);
+  const source = `${title} ${text}`.toLowerCase();
+  const words = source.match(/[a-z][a-z'-]+/g) || [];
+  const unique = [];
+
+  for (const word of words) {
+    if (word.length < 4 || stopWords.has(word) || unique.includes(word)) continue;
+    unique.push(word);
+    if (unique.length === 6) break;
+  }
+
+  return unique.length ? unique : ["details", "scene", "objects", "setting", "mood", "actions"];
+}
+
+function createTodaySnapshot() {
+  return {
+    prompt: clonePrompt(todayPrompt),
+    transcript: state.transcript,
+    feedback: cloneFeedback(state.feedback),
+    finished: todayPracticeFinished,
+  };
+}
+
+function buildHistoryTodayView(entry) {
+  const prompt = {
+    id: entry.id,
+    date: entry.date,
+    title: entry.title || "Saved practice",
+    image: entry.image || todayPrompt.image,
+    alt: entry.title || "Saved practice image",
+    keywords: deriveKeywordsFromText(
+      `${entry.correctedTranscript || ""} ${entry.summary || ""}`,
+      entry.title || ""
+    ),
+  };
+  const transcript = entry.originalTranscript || "";
+  const correctedTranscript = entry.correctedTranscript || transcript;
+  const feedback = normalizeFeedback(
+    {
+      ...analyzeTranscript(transcript, prompt),
+      correctedTranscript,
+      overallScore: typeof entry.score === "number" ? entry.score : 89,
+      overallSuggestion:
+        entry.summary || "Review this saved practice and compare your original words with the corrected version.",
+      keywords: prompt.keywords,
+    },
+    prompt
+  );
+
+  return {
+    prompt,
+    transcript,
+    feedback,
+    finished: true,
+  };
+}
+
+function getTodayViewData() {
+  if (!activeTodayHistoryId) {
+    return {
+      prompt: todayPrompt,
+      transcript: state.transcript,
+      feedback: state.feedback,
+      finished: todayPracticeFinished,
+      isHistory: false,
+    };
+  }
+
+  const entry = state.history.find((item) => item.id === activeTodayHistoryId);
+  if (!entry) {
+    activeTodayHistoryId = null;
+    return {
+      prompt: todayPrompt,
+      transcript: state.transcript,
+      feedback: state.feedback,
+      finished: todayPracticeFinished,
+      isHistory: false,
+    };
+  }
+
+  return {
+    ...buildHistoryTodayView(entry),
+    isHistory: true,
   };
 }
 
@@ -423,6 +739,85 @@ function setSelectedWord(word, element) {
   if (selectedWordElement) selectedWordElement.classList.add("is-selected");
 }
 
+function resetSpeakingListPractice(word = speakingListPractice.word) {
+  stopPlaybackAudio();
+  speakingListPractice = {
+    word,
+    attempt: "",
+    judged: false,
+    score: null,
+  };
+  speakingListAudioBlob = null;
+  speakingListAutoJudgeRequested = false;
+  isSpeakingListProcessing = false;
+}
+
+function getSpeakingListUiState(word) {
+  const isRecordingNow =
+    speakingListPractice.word === word &&
+    (recordingMode === "speaking-list" || recognitionMode === "speaking-list");
+  const isCurrentWord = speakingListPractice.word === word;
+  return {
+    isRecordingNow,
+    isProcessing: isCurrentWord && isSpeakingListProcessing,
+    isJudged: isCurrentWord && speakingListPractice.judged,
+    score: isCurrentWord ? speakingListPractice.score : null,
+    hasOriginalAudio: isCurrentWord && Boolean(speakingListAudioBlob),
+  };
+}
+
+async function updateSpeakingWordRecord(word, passed) {
+  const item = state.speakingList.find((entry) => entry.word === word);
+  if (!item) return;
+  try {
+    const reviewResponse = await fetch("/api/review/speaking", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ word, matched: passed }),
+    });
+    if (reviewResponse.ok) {
+      const reviewData = await reviewResponse.json();
+      state.speakingList = reviewData.list;
+    } else if (passed) item.rightCount += 1;
+    else item.wrongCount += 1;
+  } catch {
+    if (passed) item.rightCount += 1;
+    else item.wrongCount += 1;
+  }
+}
+
+async function getSpeakingJudgeResult(word, attempt, audioBlob) {
+  if (apiConfigured) {
+    const formData = new FormData();
+    formData.append("targetWord", word);
+    formData.append("attempt", attempt || "");
+    if (audioBlob) formData.append("audio", audioBlob, "speaking.webm");
+    const response = await fetch("/api/judge-word", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error("AI judge request failed.");
+    const result = await response.json();
+    return {
+      score: result.score,
+      feedback: result.feedback || "",
+      heard: result.heard || attempt,
+      passed: result.score > 80,
+    };
+  }
+
+  const normalizedAttempt = normalized(attempt || "");
+  const target = normalized(word);
+  const score =
+    normalizedAttempt === target || normalizedAttempt.includes(target) ? 88 : 58;
+  return {
+    score,
+    feedback: score > 80 ? "" : "Try the ending sound again.",
+    heard: attempt,
+    passed: score > 80,
+  };
+}
+
 function speakWord(word) {
   if (!synth || !word) return;
   synth.cancel();
@@ -439,6 +834,39 @@ function speakText(text) {
   synth.speak(utterance);
 }
 
+function stopPlaybackAudio() {
+  if (playbackAudio) {
+    playbackAudio.pause();
+    playbackAudio.src = "";
+    playbackAudio = null;
+  }
+  if (playbackAudioUrl) {
+    URL.revokeObjectURL(playbackAudioUrl);
+    playbackAudioUrl = null;
+  }
+}
+
+function playOriginalAudio(blob) {
+  if (!blob) {
+    showToast("No original recording available yet.");
+    return;
+  }
+  stopPlaybackAudio();
+  playbackAudioUrl = URL.createObjectURL(blob);
+  playbackAudio = new Audio(playbackAudioUrl);
+  playbackAudio.onended = () => {
+    stopPlaybackAudio();
+  };
+  playbackAudio.onerror = () => {
+    stopPlaybackAudio();
+    showToast("This recording could not be played.");
+  };
+  playbackAudio.play().catch(() => {
+    stopPlaybackAudio();
+    showToast("This browser could not play the recording.");
+  });
+}
+
 function updateTodayRecordingControls() {
   elements.startSpeakingButton.textContent = isTodayRecording ? "Recording" : "Start";
   elements.finishSpeakingButton.textContent = isTodayTranscriptProcessing
@@ -452,6 +880,8 @@ function updateTodayRecordingControls() {
   elements.finishSpeakingButton.disabled = !isTodayRecording;
   elements.testMicButton.disabled = isTodayRecording || isTodayTranscriptProcessing;
   elements.restartSpeakingButton.disabled = isTodayRecording || isTodayTranscriptProcessing;
+  elements.playOriginalSpeakingButton.disabled =
+    isTodayRecording || isTodayTranscriptProcessing || !dailyAudioBlob;
 
   elements.startSpeakingButton.classList.toggle("is-start-active", isTodayRecording);
   elements.finishSpeakingButton.classList.toggle(
@@ -604,12 +1034,18 @@ function ensureExampleVariant(text, mode, prompt = todayPrompt) {
   return mode === "easy" ? buildEasyExample(prompt) : buildAdvancedExample(prompt);
 }
 
-function normalizeFeedback(feedback = {}) {
+function normalizeFeedback(feedback = {}, prompt = todayPrompt) {
   return {
     ...feedback,
-    easy: ensureExampleVariant(feedback.easy, "easy", todayPrompt),
-    advanced: ensureExampleVariant(feedback.advanced, "advanced", todayPrompt),
+    overallScore:
+      typeof feedback.overallScore === "number" ? clampScore(feedback.overallScore) : null,
+    easy: ensureExampleVariant(feedback.easy, "easy", prompt),
+    advanced: ensureExampleVariant(feedback.advanced, "advanced", prompt),
   };
+}
+
+function clampScore(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
 }
 
 function normalizedSentence(text) {
@@ -723,9 +1159,13 @@ function buildGrammarSentencePairs(originalText, correctedText) {
 }
 
 function renderGrammarFeedback(originalText, correctedText) {
+  if (!String(originalText || "").trim() || !String(correctedText || "").trim()) {
+    elements.grammarSentences.innerHTML = "";
+    return;
+  }
   const pairs = buildGrammarSentencePairs(originalText, correctedText);
   if (!pairs.length) {
-    elements.grammarSentences.innerHTML = `<p class="feedback-empty">No grammar changes.</p>`;
+    elements.grammarSentences.innerHTML = "";
     return;
   }
 
@@ -733,9 +1173,6 @@ function renderGrammarFeedback(originalText, correctedText) {
     .map(
       (pair) => `
         <div class="feedback-sentence">
-          <p class="feedback-row feedback-original">
-            ${highlightOriginalSentence(pair.original, pair.corrected)}
-          </p>
           <p class="feedback-row feedback-corrected">
             ${escapeHtml(pair.corrected)}
           </p>
@@ -775,7 +1212,11 @@ async function saveWordToList(word, listName) {
 }
 
 async function removeWordFromList(word, listName) {
-  const listKey = listName === "reading" ? "readingList" : "speakingList";
+  const listKey = getWordListKey(listName);
+  getSelectedWordSet(listName).delete(word);
+  if (listName === "speaking" && speakingListPractice.word === word) {
+    resetSpeakingListPractice(null);
+  }
   try {
     const response = await fetch(
       `/api/words/${listName}/${encodeURIComponent(word)}`,
@@ -790,8 +1231,44 @@ async function removeWordFromList(word, listName) {
   } catch {
     state[listKey] = state[listKey].filter((item) => item.word !== word);
   }
+  if (selectedWord === word) setSelectedWord(null, null);
   saveState();
   renderAll();
+}
+
+async function deleteSelectedWords(listName) {
+  const wordsToDelete = getSelectedWords(listName);
+  if (!wordsToDelete.length) {
+    showToast(`Select ${getWordListLabel(listName).toLowerCase()} words first.`);
+    return;
+  }
+
+  const listKey = getWordListKey(listName);
+  const deletedSet = new Set(wordsToDelete);
+
+  try {
+    await Promise.all(
+      wordsToDelete.map((word) =>
+        fetch(`/api/words/${listName}/${encodeURIComponent(word)}`, {
+          method: "DELETE",
+        })
+      )
+    );
+  } catch {}
+
+  state[listKey] = state[listKey].filter((item) => !deletedSet.has(item.word));
+  wordsToDelete.forEach((word) => getSelectedWordSet(listName).delete(word));
+  if (selectedWord && deletedSet.has(selectedWord)) setSelectedWord(null, null);
+  if (listName === "speaking" && speakingListPractice.word && deletedSet.has(speakingListPractice.word)) {
+    resetSpeakingListPractice(null);
+  }
+  saveState();
+  renderAll();
+  showToast(
+    `${wordsToDelete.length} ${getWordListLabel(listName).toLowerCase()} word${
+      wordsToDelete.length === 1 ? "" : "s"
+    } deleted`
+  );
 }
 
 function sortedWords(words, sortMode) {
@@ -803,76 +1280,100 @@ function sortedWords(words, sortMode) {
 }
 
 function renderToday() {
-  elements.todayDate.textContent = new Date(`${todayPrompt.date}T12:00:00`).toLocaleDateString(
+  const todayView = getTodayViewData();
+  elements.todayDate.textContent = new Date(`${todayView.prompt.date}T12:00:00`).toLocaleDateString(
     "en-US",
     { month: "long", day: "numeric" }
   );
-  elements.dailyImage.src = todayPrompt.image;
-  elements.dailyImage.alt = todayPrompt.alt;
-  elements.dailyPromptTitle.textContent = todayPrompt.title;
+  elements.backToTodayButton.classList.toggle("is-hidden", !todayView.isHistory);
+  elements.dailyImage.src = todayView.prompt.image;
+  elements.dailyImage.alt = todayView.prompt.alt;
+  elements.dailyPromptTitle.textContent = todayView.prompt.title;
   elements.transcriptText.textContent =
-    state.transcript ||
-    (isTodayTranscriptProcessing
-      ? "Processing your recording..."
-      : "Tap Start to describe the picture.");
-  if (state.transcript && state.feedback.correctedTranscript) {
+    todayView.transcript ||
+    (
+      todayView.isHistory
+        ? "No original transcript was saved for this older practice."
+        : isTodayTranscriptProcessing
+          ? "Processing your recording..."
+          : "Tap Start to describe the picture."
+    );
+  if (todayView.transcript && todayView.feedback.correctedTranscript) {
     elements.feedbackOriginalTranscript.innerHTML = highlightOriginalSentence(
-      state.transcript,
-      state.feedback.correctedTranscript
+      todayView.transcript,
+      todayView.feedback.correctedTranscript
     );
   } else {
-    elements.feedbackOriginalTranscript.textContent = state.transcript ||
-      (isTodayTranscriptProcessing
+    elements.feedbackOriginalTranscript.textContent = todayView.transcript ||
+      (todayView.isHistory
+        ? "No original transcript was saved for this older practice."
+        : isTodayTranscriptProcessing
         ? "Processing your recording..."
         : "Your original transcript will appear here after you finish speaking.");
   }
-  elements.micTestResult.textContent = micPermissionGranted
-    ? SpeechRecognitionApi
-      ? apiConfigured
-        ? "Mic OK. Speech recognition available. AI available."
-        : "Mic OK. Speech recognition available. AI not configured."
-      : apiConfigured
-        ? "Mic OK. Recording available. Speech recognition unsupported."
-        : "Mic OK. Recording available. Speech recognition unsupported. AI not configured."
-    : "Mic not tested yet.";
-  renderGrammarFeedback(state.transcript, state.feedback.correctedTranscript);
-  elements.modelEasyText.textContent = state.feedback.easy;
-  elements.modelAdvancedText.textContent = state.feedback.advanced;
+  elements.micTestResult.textContent = todayView.isHistory
+    ? "Viewing a saved practice. Click Back to Today to return to today's training."
+    : micPermissionGranted
+      ? SpeechRecognitionApi
+        ? apiConfigured
+          ? "Mic OK. Speech recognition available. AI available."
+          : "Mic OK. Speech recognition available. AI not configured."
+        : apiConfigured
+          ? "Mic OK. Recording available. Speech recognition unsupported."
+          : "Mic OK. Recording available. Speech recognition unsupported. AI not configured."
+      : "Mic not tested yet.";
+  renderGrammarFeedback(todayView.transcript, todayView.feedback.correctedTranscript);
+  elements.modelEasyText.textContent = todayView.feedback.easy;
+  elements.modelAdvancedText.textContent = todayView.feedback.advanced;
   elements.aiSuggestionText.textContent =
-    state.feedback.overallSuggestion ||
-    state.feedback.grammarNote ||
-    "AI suggestions will appear here after your recording is judged.";
+    todayView.finished
+      ? (
+          todayView.feedback.overallSuggestion ||
+          todayView.feedback.grammarNote ||
+          ""
+        )
+      : "";
+  elements.aiSuggestionScore.textContent =
+    typeof todayView.feedback.overallScore === "number"
+      ? `Score: ${todayView.feedback.overallScore}/100`
+      : "";
+  elements.aiSuggestionScore.classList.toggle(
+    "is-hidden",
+    typeof todayView.feedback.overallScore !== "number"
+  );
 
   const activeModelButton =
     document.querySelector('.toggle-button.is-active[data-model]') ||
     document.querySelector('.toggle-button[data-model="easy"]');
   const activeModel = activeModelButton?.dataset.model || "easy";
-  elements.modelToggleRow.classList.toggle("is-hidden", !todayPracticeFinished);
-  elements.modelLockedNote.classList.toggle("is-hidden", todayPracticeFinished);
+  elements.modelToggleRow.classList.toggle("is-hidden", !todayView.finished);
+  elements.modelLockedNote.classList.toggle("is-hidden", todayView.finished);
   document.querySelectorAll(".model-copy").forEach((copy) => {
     copy.classList.toggle(
       "is-visible",
-      todayPracticeFinished && copy.id === `model-${activeModel}`
+      todayView.finished && copy.id === `model-${activeModel}`
     );
   });
 
-  elements.pronunciationFlags.innerHTML = state.feedback.pronunciationWords.length
-    ? state.feedback.pronunciationWords
+  elements.pronunciationFlags.innerHTML = todayView.feedback.pronunciationWords.length
+    ? todayView.feedback.pronunciationWords
         .map(
           (word) =>
             `<button class="word-chip issue" data-word-value="${word}" data-word-select="${word}">${word}</button>`
         )
         .join("")
-    : `<span class="muted">No flagged words.</span>`;
+    : ``;
 
-  elements.keywordGrid.innerHTML = state.feedback.keywords
-    .map(
-      (word) =>
-        `<button class="word-chip" data-word-value="${word}" data-word-select="${word}">${word}</button>`
-    )
-    .join("");
+  elements.keywordGrid.innerHTML = todayView.feedback.keywords.length
+    ? todayView.feedback.keywords
+        .map(
+          (word) =>
+            `<button class="word-chip" data-word-value="${word}" data-word-select="${word}">${word}</button>`
+        )
+        .join("")
+    : "";
 
-  [...state.feedback.pronunciationWords, ...state.feedback.keywords].forEach((word) =>
+  [...todayView.feedback.pronunciationWords, ...todayView.feedback.keywords].forEach((word) =>
     lookupWordEntry(word)
   );
 
@@ -897,36 +1398,84 @@ function renderToday() {
     )
     .join("");
 
+  if (todayView.isHistory) {
+    elements.transcriptProcessing.classList.add("is-hidden");
+    elements.startSpeakingButton.textContent = "Start";
+    elements.finishSpeakingButton.textContent = "Finish";
+    elements.startSpeakingButton.disabled = true;
+    elements.finishSpeakingButton.disabled = true;
+    elements.testMicButton.disabled = true;
+    elements.restartSpeakingButton.disabled = true;
+    elements.playOriginalSpeakingButton.disabled = true;
+    elements.startSpeakingButton.classList.remove("is-start-active");
+    elements.finishSpeakingButton.classList.remove("is-finish-active");
+    return;
+  }
+
   updateTodayRecordingControls();
   setTodayTranscriptProcessing(isTodayTranscriptProcessing);
 }
 
 function renderHistory() {
+  renderHistoryFilterControls();
   const query = elements.historySearch.value.trim().toLowerCase();
   const dateValue = elements.historyDate.value;
+  const monthKey = `${historyYear}-${historyMonth}`;
+  const historyPageSize = historyCardMode === "lite" ? 9 : pageSize;
   const filtered = state.history.filter((entry) => {
-    const matchesMonth = currentMonth === "all" || entry.date.startsWith(currentMonth);
     const haystack = `${entry.title} ${entry.summary} ${entry.date}`.toLowerCase();
     const matchesSearch = !query || haystack.includes(query);
-    const matchesDate = !dateValue || entry.date === dateValue;
-    return matchesMonth && matchesSearch && matchesDate;
+    const matchesView =
+      historyFilterMode === "date" && dateValue
+        ? entry.date === dateValue
+        : historyFilterMode === "month"
+          ? entry.date.startsWith(monthKey)
+          : true;
+    return matchesSearch && matchesView;
   });
+  currentFilteredHistoryIds = filtered.map((entry) => entry.id);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / historyPageSize));
   historyPage = Math.min(historyPage, totalPages);
-  const visible = filtered.slice((historyPage - 1) * pageSize, historyPage * pageSize);
+  const visible = filtered.slice(
+    (historyPage - 1) * historyPageSize,
+    historyPage * historyPageSize
+  );
 
   elements.historyGrid.innerHTML = visible
-    .map(
-      (entry) => `
+    .map((entry) => {
+      const score = typeof entry.score === "number" ? entry.score : 89;
+      if (historyCardMode === "lite") {
+        return `
         <article
-          class="history-card panel"
+          class="history-card history-card-lite panel ${selectedHistoryIds.has(entry.id) ? "is-selected" : ""}"
           data-history-open="${entry.id}"
           role="button"
           tabindex="0"
           aria-label="Open history preview for ${escapeHtml(entry.title)}"
         >
-          <div class="history-card-actions">
+          <div class="history-copy">
+            <div class="history-lite-top-row">
+              <div class="history-card-select">
+                <input
+                  class="history-select-checkbox"
+                  type="checkbox"
+                  data-history-select="${entry.id}"
+                  aria-label="Select history entry ${escapeHtml(entry.title)}"
+                  ${selectedHistoryIds.has(entry.id) ? "checked" : ""}
+                />
+              </div>
+              <div class="history-meta-row">
+                <p class="eyebrow">${formatDateLabel(entry.date)}</p>
+                <span class="history-score-chip">Score ${score}</span>
+              </div>
+            </div>
+            <h4>${escapeHtml(entry.title)}</h4>
+          </div>
+          <div class="history-card-footer">
+            <button class="ghost-button history-open-button" data-history-open="${entry.id}">
+              Preview
+            </button>
             <button
               class="history-delete-button"
               data-history-delete="${entry.id}"
@@ -935,9 +1484,32 @@ function renderHistory() {
               Delete
             </button>
           </div>
+        </article>
+      `;
+      }
+      return `
+        <article
+          class="history-card panel ${selectedHistoryIds.has(entry.id) ? "is-selected" : ""}"
+          data-history-open="${entry.id}"
+          role="button"
+          tabindex="0"
+          aria-label="Open history preview for ${escapeHtml(entry.title)}"
+        >
+          <div class="history-card-select">
+            <input
+              class="history-select-checkbox"
+              type="checkbox"
+              data-history-select="${entry.id}"
+              aria-label="Select history entry ${escapeHtml(entry.title)}"
+              ${selectedHistoryIds.has(entry.id) ? "checked" : ""}
+            />
+          </div>
           <img src="${entry.image}" alt="${escapeHtml(entry.title)}" />
           <div class="history-copy">
-            <p class="eyebrow">${formatDateLabel(entry.date)}</p>
+            <div class="history-meta-row">
+              <p class="eyebrow">${formatDateLabel(entry.date)}</p>
+              <span class="history-score-chip">Score ${score}</span>
+            </div>
             <h4>${escapeHtml(entry.title)}</h4>
             <p>${escapeHtml(entry.summary || "Open to review your original words and the corrected version.")}</p>
           </div>
@@ -945,10 +1517,17 @@ function renderHistory() {
             <button class="ghost-button history-open-button" data-history-open="${entry.id}">
               Preview
             </button>
+            <button
+              class="history-delete-button"
+              data-history-delete="${entry.id}"
+              aria-label="Delete history entry ${escapeHtml(entry.title)}"
+            >
+              Delete
+            </button>
           </div>
         </article>
-      `
-    )
+      `;
+    })
     .join("");
 
   if (!visible.length) {
@@ -964,8 +1543,12 @@ function renderHistory() {
   elements.historyPageStatus.textContent = `Page ${historyPage} of ${totalPages}`;
   elements.historyPrev.disabled = historyPage === 1;
   elements.historyNext.disabled = historyPage === totalPages;
-  elements.monthSummaryTitle.textContent = formatMonthLabel(currentMonth);
   elements.monthSessionCount.textContent = `${filtered.length} session${filtered.length === 1 ? "" : "s"}`;
+  const allFilteredSelected = areAllFilteredHistorySelected();
+  elements.selectAllHistoryButton.disabled = currentFilteredHistoryIds.length === 0;
+  elements.selectAllHistoryButton.textContent = allFilteredSelected ? "Cancel" : "Select All";
+  elements.selectAllHistoryButton.classList.toggle("is-active", allFilteredSelected);
+  elements.deleteAllHistory.disabled = getSelectedHistoryIds().length === 0;
 }
 
 function openHistoryPreview(id) {
@@ -977,8 +1560,10 @@ function openHistoryPreview(id) {
   elements.historyPreviewDate.textContent = formatDateLabel(entry.date);
   elements.historyPreviewTitle.textContent = entry.title;
   elements.historyPreviewSummary.textContent = entry.summary || "";
-  elements.historyPreviewOriginal.textContent =
-    entry.originalTranscript || "No original transcript was saved for this older practice.";
+  elements.historyPreviewOriginal.innerHTML =
+    entry.originalTranscript && entry.correctedTranscript
+      ? highlightOriginalSentence(entry.originalTranscript, entry.correctedTranscript)
+      : escapeHtml(entry.originalTranscript || "No original transcript was saved for this older practice.");
   elements.historyPreviewCorrected.textContent =
     entry.correctedTranscript || entry.summary || "No corrected version was saved for this older practice.";
   elements.historyPreviewBackdrop.classList.add("is-open");
@@ -993,7 +1578,42 @@ function closeHistoryPreview() {
   elements.historyPreview.setAttribute("aria-hidden", "true");
 }
 
+function switchToView(viewName) {
+  document.querySelectorAll(".nav-link").forEach((item) =>
+    item.classList.toggle("is-active", item.dataset.view === viewName)
+  );
+  Object.entries(elements.views).forEach(([name, view]) => {
+    view.classList.toggle("is-visible", name === viewName);
+  });
+}
+
+function openHistoryDetailsInToday(id) {
+  const entry = state.history.find((item) => item.id === id);
+  if (!entry) return;
+  if (!activeTodayHistoryId) {
+    todayLiveSnapshot = createTodaySnapshot();
+  }
+  activeTodayHistoryId = id;
+  closeHistoryPreview();
+  switchToView("today");
+  renderAll();
+}
+
+function returnToLiveToday() {
+  activeTodayHistoryId = null;
+  if (todayLiveSnapshot) {
+    Object.assign(todayPrompt, todayLiveSnapshot.prompt);
+    state.transcript = todayLiveSnapshot.transcript;
+    state.feedback = todayLiveSnapshot.feedback;
+    todayPracticeFinished = todayLiveSnapshot.finished;
+    todayLiveSnapshot = null;
+  }
+  renderAll();
+}
+
 async function deleteHistory(id) {
+  const shouldReturnToToday = activeTodayHistoryId === id;
+  selectedHistoryIds.delete(id);
   try {
     const response = await fetch(`/api/history/${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -1008,42 +1628,76 @@ async function deleteHistory(id) {
     state.history = state.history.filter((entry) => entry.id !== id);
   }
   if (activeHistoryPreviewId === id) closeHistoryPreview();
+  if (shouldReturnToToday) {
+    activeTodayHistoryId = null;
+    returnToLiveToday();
+  }
   historyPage = 1;
   renderHistory();
   showToast("History deleted");
 }
 
 async function deleteAllHistory() {
-  try {
-    const response = await fetch("/api/history", { method: "DELETE" });
-    if (response.ok) {
-      const data = await response.json();
-      state.history = data.history;
-    } else {
-      state.history = [];
-    }
-  } catch {
-    state.history = [];
+  const idsToDelete = getSelectedHistoryIds();
+  if (!idsToDelete.length) {
+    showToast("Select history first.");
+    return;
   }
+
+  const deletedSet = new Set(idsToDelete);
+  const shouldReturnToToday = activeTodayHistoryId && deletedSet.has(activeTodayHistoryId);
+
+  try {
+    await Promise.all(
+      idsToDelete.map((id) =>
+        fetch(`/api/history/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        })
+      )
+    );
+  } catch {}
+
+  state.history = state.history.filter((entry) => !deletedSet.has(entry.id));
+  clearHistorySelection();
   closeHistoryPreview();
   historyPage = 1;
-  renderHistory();
-  showToast("All history deleted");
+
+  if (shouldReturnToToday) {
+    activeTodayHistoryId = null;
+    returnToLiveToday();
+  } else {
+    renderHistory();
+  }
+
+  showToast(
+    `${idsToDelete.length} history item${idsToDelete.length === 1 ? "" : "s"} deleted`
+  );
 }
 
 function renderWordList(listName) {
-  const listKey = listName === "reading" ? "readingList" : "speakingList";
+  const listKey = getWordListKey(listName);
   const searchInput =
     listName === "reading" ? elements.vocabularySearch : elements.speakingSearch;
   const sortInput = listName === "reading" ? elements.vocabularySort : elements.speakingSort;
   const liteList = listName === "reading" ? elements.vocabularyLiteList : elements.speakingLiteList;
   const fullPanel =
     listName === "reading" ? elements.vocabularyFullPanel : elements.speakingFullPanel;
+  const selectAllButton =
+    listName === "reading"
+      ? elements.selectAllReadingButton
+      : elements.selectAllSpeakingButton;
+  const deleteSelectedButton =
+    listName === "reading"
+      ? elements.deleteSelectedReadingButton
+      : elements.deleteSelectedSpeakingButton;
   const pageNode =
     listName === "reading" ? elements.vocabularyPageStatus : elements.speakingPageStatus;
   const prevNode = listName === "reading" ? elements.vocabularyPrev : elements.speakingPrev;
   const nextNode = listName === "reading" ? elements.vocabularyNext : elements.speakingNext;
   const page = listName === "reading" ? readingPage : speakingPage;
+  const activeMode = getActiveWordMode(listName);
+  const listPageSize = activeMode === "lite" ? liteListPageSize : fullListPageSize;
+  const selectedSet = getSelectedWordSet(listName);
 
   const filtered = sortedWords(
     state[listKey].filter((item) => {
@@ -1051,6 +1705,10 @@ function renderWordList(listName) {
       return !searchInput.value.trim() || haystack.includes(searchInput.value.trim().toLowerCase());
     }),
     sortInput.value
+  );
+  setCurrentFilteredWords(
+    listName,
+    filtered.map((item) => item.word)
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / listPageSize));
@@ -1060,82 +1718,211 @@ function renderWordList(listName) {
   const visible = filtered.slice((safePage - 1) * listPageSize, safePage * listPageSize);
 
   liteList.innerHTML = visible
-    .map(
-      (item) => `
-        <div class="lite-word-row" data-word-select="${item.word}" data-word-surface="lite">
-          <strong>${item.word}</strong>
+    .map((item) => {
+      const escapedWord = escapeHtml(item.word);
+      const isBulkSelected = selectedSet.has(item.word);
+      const speakingUi = listName === "speaking" ? getSpeakingListUiState(item.word) : null;
+      return `
+        <div class="lite-word-row ${isBulkSelected ? "is-bulk-selected" : ""}" data-word-select="${escapedWord}" data-word-surface="lite">
+          <label
+            class="word-select-chip lite-word-select-chip"
+            data-list-select-name="${listName}"
+            data-list-select-word="${escapedWord}"
+          >
+            <input
+              class="word-select-checkbox"
+              type="checkbox"
+              aria-label="Select ${getWordListLabel(listName).toLowerCase()} word ${escapedWord}"
+              ${isBulkSelected ? "checked" : ""}
+            />
+          </label>
+          <div class="lite-word-copy">
+            <strong>${escapedWord}</strong>
+            <span class="lite-word-record">Right ${item.rightCount} / Wrong ${item.wrongCount}</span>
+          </div>
           <div class="lite-word-actions">
-            <button class="inline-audio-button" data-word-audio="${item.word}" aria-label="Play pronunciation for ${item.word}">&#128264;</button>
-            <button class="ghost-button small-button" data-delete-word="${item.word}" data-delete-list="${listName}">Delete</button>
+            <button class="inline-audio-button" data-word-audio="${escapedWord}" aria-label="Play pronunciation for ${escapedWord}">&#128264;</button>
+            ${
+              listName === "speaking"
+                ? `<div class="lite-word-controls">
+                    <button class="ghost-button small-button ${speakingUi.isRecordingNow ? "is-active" : ""}" data-speaking-list-start="${escapedWord}" ${speakingUi.isProcessing || speakingUi.isJudged ? "disabled" : ""}>
+                      ${speakingUi.isRecordingNow ? "Recording" : "Start"}
+                    </button>
+                    <button class="ghost-button small-button ${speakingUi.isProcessing || speakingUi.isJudged ? "is-active" : ""}" data-speaking-list-finish="${escapedWord}" ${
+                      speakingUi.isProcessing || speakingUi.isJudged
+                        ? "disabled"
+                        : !speakingUi.isRecordingNow &&
+                            !(speakingListPractice.word === item.word && (speakingListAudioBlob || speakingListPractice.attempt.trim()))
+                          ? "disabled"
+                          : ""
+                    }>
+                      ${speakingUi.isProcessing ? "Proceed" : speakingUi.isJudged ? "Judged" : "Finish"}
+                    </button>
+                    <button class="ghost-button small-button" data-speaking-list-retry="${escapedWord}" ${speakingUi.isJudged ? "" : "disabled"}>
+                      Retry
+                    </button>
+                    <button class="ghost-button small-button" data-speaking-list-original="${escapedWord}" ${speakingUi.hasOriginalAudio ? "" : "disabled"}>
+                      Original
+                    </button>
+                    ${speakingUi.isJudged && speakingUi.score !== null ? `<span class="speaking-list-score">Score ${speakingUi.score}/100</span>` : ""}
+                    <button class="ghost-button small-button" data-delete-word="${escapedWord}" data-delete-list="${listName}">Delete</button>
+                  </div>`
+                : `<button class="ghost-button small-button" data-delete-word="${escapedWord}" data-delete-list="${listName}">Delete</button>`
+            }
           </div>
         </div>
-      `
-    )
+      `;
+    })
     .join("");
 
   fullPanel.innerHTML = visible
-    .map(
-      (item) => `
-        <article class="panel practice-target word-card-entry ${listName === "reading" ? "word-entry" : ""}" data-word-list="${listName}" data-word="${item.word}" data-word-select="${item.word}" data-word-surface="full">
+    .map((item) => {
+      const escapedWord = escapeHtml(item.word);
+      const isBulkSelected = selectedSet.has(item.word);
+      const speakingUi = listName === "speaking" ? getSpeakingListUiState(item.word) : null;
+      return `
+        <article class="panel practice-target word-card-entry ${listName === "reading" ? "word-entry" : ""} ${isBulkSelected ? "is-bulk-selected" : ""}" data-word-list="${listName}" data-word="${escapedWord}" data-word-select="${escapedWord}" data-word-surface="full">
           <div class="target-top">
-            <div>
-              <p class="eyebrow">${formatDateLabel(item.savedAt)}</p>
-              <h4>${item.word}</h4>
+            <div class="target-top-main">
+              <label
+                class="word-select-chip"
+                data-list-select-name="${listName}"
+                data-list-select-word="${escapedWord}"
+              >
+                <input
+                  class="word-select-checkbox"
+                  type="checkbox"
+                  aria-label="Select ${getWordListLabel(listName).toLowerCase()} word ${escapedWord}"
+                  ${isBulkSelected ? "checked" : ""}
+                />
+              </label>
+              <p class="eyebrow word-card-date">${formatDateLabel(item.savedAt)}</p>
             </div>
-            <button class="inline-audio-button" data-word-audio="${item.word}" aria-label="Play pronunciation for ${item.word}">&#128264;</button>
           </div>
-          <p class="phonetic">${item.phonetic}</p>
-          <p class="meaning">${item.meaning}</p>
-          <p class="memory-line">${listName === "reading" ? "Reading" : "Speaking"} record: Right ${item.rightCount} / Wrong ${item.wrongCount}</p>
-          <p class="example">Example: "${item.example}"</p>
-          <div class="action-row">
-            <button class="ghost-button small-button" data-delete-word="${item.word}" data-delete-list="${listName}">Delete</button>
+          <h4 class="word-card-title">${escapedWord}</h4>
+          <div class="phonetic-row">
+            <button class="inline-audio-button" data-word-audio="${escapedWord}" aria-label="Play pronunciation for ${escapedWord}">&#128264;</button>
+            <p class="phonetic">${escapeHtml(item.phonetic)}</p>
+          </div>
+          <p class="memory-line">${listName === "reading" ? "Reading" : "Speaking"}: Right ${item.rightCount} / Wrong ${item.wrongCount}</p>
+          <p class="meaning detail-line">Meaning: ${escapeHtml(item.meaning)}</p>
+          <p class="example detail-line">Example: "${escapeHtml(item.example)}"</p>
+          <div class="action-row speaking-list-full-actions">
             ${
               listName === "speaking"
-                ? `<button class="primary-button small-button" data-practice-word="${item.word}">Start</button>
-                   <button class="ghost-button small-button" data-judge-word="${item.word}">Finish</button>`
-                : ""
+                ? `<button class="ghost-button small-button ${speakingUi.isRecordingNow ? "is-active" : ""}" data-speaking-list-start="${escapedWord}" ${speakingUi.isProcessing || speakingUi.isJudged ? "disabled" : ""}>
+                     ${speakingUi.isRecordingNow ? "Recording" : "Start"}
+                   </button>
+                   <button class="ghost-button small-button ${speakingUi.isProcessing || speakingUi.isJudged ? "is-active" : ""}" data-speaking-list-finish="${escapedWord}" ${
+                     speakingUi.isProcessing || speakingUi.isJudged
+                       ? "disabled"
+                       : !speakingUi.isRecordingNow &&
+                           !(speakingListPractice.word === item.word && (speakingListAudioBlob || speakingListPractice.attempt.trim()))
+                         ? "disabled"
+                         : ""
+                   }>
+                     ${speakingUi.isProcessing ? "Proceed" : speakingUi.isJudged ? "Judged" : "Finish"}
+                   </button>
+                   <button class="ghost-button small-button" data-speaking-list-retry="${escapedWord}" ${speakingUi.isJudged ? "" : "disabled"}>
+                     Retry
+                   </button>
+                   <button class="ghost-button small-button" data-speaking-list-original="${escapedWord}" ${speakingUi.hasOriginalAudio ? "" : "disabled"}>
+                     Original
+                   </button>
+                   ${speakingUi.isJudged && speakingUi.score !== null ? `<span class="speaking-list-score">Score ${speakingUi.score}/100</span>` : ""}
+                   <button class="ghost-button small-button" data-delete-word="${escapedWord}" data-delete-list="${listName}">Delete</button>`
+                : `<button class="ghost-button small-button" data-delete-word="${escapedWord}" data-delete-list="${listName}">Delete</button>`
             }
           </div>
         </article>
-      `
-    )
+      `;
+    })
     .join("");
 
   pageNode.textContent = `Page ${safePage} of ${totalPages}`;
   prevNode.disabled = safePage === 1;
   nextNode.disabled = safePage === totalPages;
-}
-
-function ensureReadingQueue() {
-  if (!state.review.readingQueue.length) {
-    const count = parseInt(elements.readingReviewCount.value, 10) || 10;
-    state.review.readingQueue = state.readingList.slice(0, count).map((item) => item.word);
-    state.review.readingIndex = 0;
-    state.review.readingPending = null;
-  }
+  const allFilteredSelected = areAllFilteredWordsSelected(listName);
+  selectAllButton.disabled = getCurrentFilteredWords(listName).length === 0;
+  selectAllButton.textContent = allFilteredSelected ? "Cancel" : "Select All";
+  selectAllButton.classList.toggle("is-active", allFilteredSelected);
+  deleteSelectedButton.disabled = getSelectedWords(listName).length === 0;
 }
 
 function getReadingReviewWord() {
-  ensureReadingQueue();
-  const word = state.review.readingQueue[state.review.readingIndex] || state.readingList[0]?.word;
-  return state.readingList.find((item) => item.word === word) || state.readingList[0];
+  if (!state.review.readingActive || !state.review.readingQueue.length) return null;
+  const word = state.review.readingQueue[state.review.readingIndex];
+  return state.readingList.find((item) => item.word === word) || null;
+}
+
+function startReadingReviewSession() {
+  const count = parseInt(elements.readingReviewCount.value, 10) || 10;
+  const queue = state.readingList.slice(0, count).map((item) => item.word);
+  if (!queue.length) {
+    showToast("Add reading words first.");
+    return;
+  }
+  readingSessionResults = new Map();
+  closeReviewSummary();
+  state.review.readingActive = true;
+  state.review.readingQueue = queue;
+  state.review.readingIndex = 0;
+  state.review.readingChoice = null;
+  state.review.readingPending = null;
+  saveState();
+  renderReadingReview();
+}
+
+async function finishReadingReviewSession() {
+  if (!state.review.readingActive) return;
+  await commitReadingPending();
+  const summaryResults = new Map(readingSessionResults);
+  readingSessionResults = new Map();
+  state.review.readingActive = false;
+  state.review.readingQueue = [];
+  state.review.readingIndex = 0;
+  state.review.readingChoice = null;
+  state.review.readingPending = null;
+  saveState();
+  renderReadingReview();
+  openReviewSummary("Reading", summaryResults);
 }
 
 function renderReadingReview() {
   const item = getReadingReviewWord();
-  if (!item) return;
+  const isActive = Boolean(state.review.readingActive && item);
+  elements.readingReviewCard.classList.toggle("is-hidden", !isActive);
+  elements.finishReadingReview.disabled = !state.review.readingActive;
+  if (!isActive) {
+    elements.readingReviewMeaningPanel.classList.add("is-hidden");
+    return;
+  }
   elements.readingReviewProgress.textContent = `Word ${state.review.readingIndex + 1} of ${state.review.readingQueue.length}`;
   elements.readingReviewWord.textContent = item.word;
   elements.readingReviewPhonetic.textContent = item.phonetic;
-  elements.readingReviewMeaning.textContent = item.meaning;
-  elements.readingReviewMemory.textContent = `Memory record: Remembered ${item.rightCount} times, forgot ${item.wrongCount} times.`;
-  elements.readingReviewMeaningPanel.classList.add("is-hidden");
+  elements.readingReviewMeaning.textContent = `Meaning: ${item.meaning}.`;
+  elements.readingReviewExample.textContent = `Example: "${item.example}"`;
+  elements.readingReviewMeaningPanel.classList.toggle("is-hidden", !state.review.readingChoice);
+  elements.reviewYes.classList.toggle("is-active", state.review.readingChoice === "yes");
+  elements.reviewNo.classList.toggle("is-active", state.review.readingChoice === "no");
+  elements.readingReviewWrong.classList.toggle(
+    "is-active",
+    state.review.readingChoice === "remember-wrong"
+  );
+  elements.readingReviewWrong.disabled = !state.review.readingChoice;
+  elements.readingReviewPrev.disabled = state.review.readingIndex === 0;
+  elements.readingReviewNext.textContent =
+    state.review.readingIndex >= state.review.readingQueue.length - 1 ? "Finish" : "Next Word";
+  elements.readingReviewNext.disabled = !state.review.readingChoice;
 }
 
 async function commitReadingPending() {
   const item = getReadingReviewWord();
   if (!item || !state.review.readingPending) return;
+  readingSessionResults.set(
+    state.review.readingIndex,
+    state.review.readingPending === "right" ? "right" : "wrong"
+  );
   try {
     const response = await fetch("/api/review/reading", {
       method: "POST",
@@ -1152,39 +1939,187 @@ async function commitReadingPending() {
     else item.wrongCount += 1;
   }
   state.review.readingPending = null;
+  state.review.readingChoice = null;
   saveState();
 }
 
 function getSpeakingReviewWord() {
-  return state.speakingList[state.review.speakingIndex] || state.speakingList[0];
+  if (!state.review.speakingActive || !state.review.speakingQueue.length) return null;
+  const word = state.review.speakingQueue[state.review.speakingIndex];
+  return state.speakingList.find((item) => item.word === word) || null;
+}
+
+function startSpeakingReviewSession(queueWords = null) {
+  const requestedCount = parseInt(elements.speakingReviewCount.value, 10) || 10;
+  const queue = queueWords?.length
+    ? queueWords
+    : state.speakingList.slice(0, requestedCount).map((item) => item.word);
+  if (!queue.length) {
+    showToast("Add speaking words first.");
+    return;
+  }
+  speakingSessionResults = new Map();
+  closeReviewSummary();
+  state.review.speakingActive = true;
+  state.review.speakingQueue = queue;
+  state.review.speakingIndex = 0;
+  state.review.speakingAttempt = "";
+  state.review.speakingStatus = "Ready";
+  state.review.speakingJudged = false;
+  isSpeakingReviewProcessing = false;
+  stopPlaybackAudio();
+  speakingAudioBlob = null;
+  saveState();
+  renderSpeakingReview();
+}
+
+function finishSpeakingReviewSession() {
+  const isRecordingNow =
+    recordingMode === "speaking-review" || recognitionMode === "speaking-review";
+  if (isRecordingNow || isSpeakingReviewProcessing) {
+    showToast("Finish the current word first.");
+    return;
+  }
+  const summaryResults = new Map(speakingSessionResults);
+  speakingSessionResults = new Map();
+  state.review.speakingActive = false;
+  state.review.speakingQueue = [];
+  state.review.speakingIndex = 0;
+  state.review.speakingAttempt = "";
+  state.review.speakingStatus = "Ready";
+  state.review.speakingJudged = false;
+  isSpeakingReviewProcessing = false;
+  stopPlaybackAudio();
+  speakingAudioBlob = null;
+  saveState();
+  renderSpeakingReview();
+  openReviewSummary("Speaking", summaryResults);
+}
+
+function retrySpeakingReviewAttempt() {
+  if (!state.review.speakingActive) return;
+  const isRecordingNow =
+    recordingMode === "speaking-review" || recognitionMode === "speaking-review";
+  if (isRecordingNow || isSpeakingReviewProcessing) return;
+  state.review.speakingAttempt = "";
+  state.review.speakingStatus = "Ready";
+  state.review.speakingJudged = false;
+  isSpeakingReviewProcessing = false;
+  stopPlaybackAudio();
+  speakingAudioBlob = null;
+  saveState();
+  renderSpeakingReview();
+}
+
+async function judgeSpeakingListWord(word) {
+  const item = state.speakingList.find((entry) => entry.word === word);
+  if (!item || speakingListPractice.word !== word) return;
+
+  if (!speakingListPractice.attempt.trim() && !speakingListAudioBlob) {
+    isSpeakingListProcessing = false;
+    speakingListPractice.judged = false;
+    renderWordList("speaking");
+    showToast("Please say the word first.");
+    return;
+  }
+
+  try {
+    const result = await getSpeakingJudgeResult(
+      word,
+      speakingListPractice.attempt,
+      speakingListAudioBlob
+    );
+    speakingListPractice.attempt = result.heard || speakingListPractice.attempt;
+    await updateSpeakingWordRecord(word, result.passed);
+    saveState();
+    speakingListPractice.judged = true;
+    speakingListPractice.score = result.score;
+    isSpeakingListProcessing = false;
+    renderWordList("speaking");
+    return;
+  } catch {
+    isSpeakingListProcessing = false;
+    renderWordList("speaking");
+    showToast("AI judge failed. Using local fallback.");
+  }
 }
 
 function renderSpeakingReview() {
   const item = getSpeakingReviewWord();
-  if (!item) return;
   const isRecordingNow =
     recordingMode === "speaking-review" || recognitionMode === "speaking-review";
-  elements.speakingReviewProgress.textContent = `Speaking word ${state.review.speakingIndex + 1} of ${state.speakingList.length}`;
+  const isActive = Boolean(state.review.speakingActive && item);
+  elements.speakingReviewCard.classList.toggle("is-hidden", !isActive);
+  elements.finishSpeakingSession.disabled =
+    !state.review.speakingActive || isRecordingNow || isSpeakingReviewProcessing;
+  if (!isActive) return;
+  elements.speakingReviewProgress.textContent = `Word ${state.review.speakingIndex + 1} of ${state.review.speakingQueue.length}`;
   elements.speakingReviewWord.textContent = item.word;
   elements.speakingPhonetic.textContent = item.phonetic;
   elements.speakingPhonetic.classList.toggle("is-hidden", !state.review.speakingJudged);
-  elements.speakingResult.textContent =
-    state.review.speakingStatus || "Say the word clearly, then press Finish.";
+  elements.speakingResult.textContent = state.review.speakingStatus || "Ready";
   elements.startSpeakingReview.textContent = isRecordingNow ? "Recording" : "Start";
+  elements.startSpeakingReview.classList.toggle("is-active", isRecordingNow);
   elements.runAiJudge.textContent = isSpeakingReviewProcessing
-    ? "Processing"
+    ? "Proceed"
     : state.review.speakingJudged
       ? "Judged"
       : "Finish";
-  elements.startSpeakingReview.disabled = isSpeakingReviewProcessing;
+  elements.runAiJudge.classList.toggle(
+    "is-active",
+    isSpeakingReviewProcessing || state.review.speakingJudged
+  );
+  elements.startSpeakingReview.disabled = isSpeakingReviewProcessing || state.review.speakingJudged;
   elements.runAiJudge.disabled =
     isSpeakingReviewProcessing ||
     state.review.speakingJudged ||
     (!isRecordingNow && !speakingAudioBlob && !state.review.speakingAttempt);
+  elements.retrySpeakingReview.disabled = isRecordingNow || isSpeakingReviewProcessing || !state.review.speakingJudged;
+  elements.originalSpeakingReview.disabled =
+    isRecordingNow || isSpeakingReviewProcessing || !speakingAudioBlob;
   elements.speakingMemoryLine.textContent = `Speaking record: Right ${item.rightCount} times, wrong ${item.wrongCount} times.`;
   elements.speakingMemoryLine.classList.toggle("is-hidden", !state.review.speakingJudged);
   elements.speakingMeaning.textContent = `Meaning: ${item.meaning}.`;
   elements.speakingExample.textContent = `Example: "${item.example}"`;
+  elements.speakingReviewPrev.disabled = state.review.speakingIndex === 0;
+  elements.speakingReviewNext.textContent =
+    state.review.speakingIndex >= state.review.speakingQueue.length - 1 ? "Finish" : "Next Word";
+  elements.speakingReviewNext.disabled = !state.review.speakingJudged;
+}
+
+function buildReviewSummary(type, sessionResults) {
+  const results = [...sessionResults.values()];
+  const right = results.filter((result) => result === "right").length;
+  const wrong = results.filter((result) => result === "wrong").length;
+  const total = right + wrong;
+  return {
+    type,
+    right,
+    wrong,
+    rate: total ? Math.round((right / total) * 100) : 0,
+  };
+}
+
+function openReviewSummary(type, sessionResults) {
+  reviewSummary = buildReviewSummary(type, sessionResults);
+  renderReviewSummary();
+}
+
+function closeReviewSummary() {
+  reviewSummary = null;
+  renderReviewSummary();
+}
+
+function renderReviewSummary() {
+  const isOpen = Boolean(reviewSummary);
+  elements.reviewSummaryBackdrop.classList.toggle("is-open", isOpen);
+  elements.reviewSummaryBackdrop.setAttribute("aria-hidden", String(!isOpen));
+  elements.reviewSummaryModal.setAttribute("aria-hidden", String(!isOpen));
+  if (!isOpen) return;
+  elements.reviewSummaryType.textContent = `${reviewSummary.type} Review`;
+  elements.reviewSummaryRight.textContent = String(reviewSummary.right);
+  elements.reviewSummaryWrong.textContent = String(reviewSummary.wrong);
+  elements.reviewSummaryRate.textContent = `Correction Rate: ${reviewSummary.rate}%`;
 }
 
 function renderAll() {
@@ -1194,6 +2129,17 @@ function renderAll() {
   renderWordList("speaking");
   renderReadingReview();
   renderSpeakingReview();
+  renderReviewSummary();
+}
+
+function openSpeakingReviewTab(queueWords = null) {
+  switchToView("settings");
+  document.querySelectorAll("[data-review-tab]").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.reviewTab === "speaking");
+  });
+  document.querySelectorAll(".review-tab").forEach((tab) => tab.classList.remove("is-visible"));
+  document.getElementById("review-tab-speaking").classList.add("is-visible");
+  startSpeakingReviewSession(queueWords);
 }
 
 function startRecognition(mode) {
@@ -1225,8 +2171,12 @@ function startRecognition(mode) {
 
   recognition.onstart = () => {
     if (mode !== "today") {
-      state.review.speakingStatus = "Recording";
-      renderSpeakingReview();
+      if (mode === "speaking-review") {
+        state.review.speakingStatus = "Recording";
+        renderSpeakingReview();
+      } else if (mode === "speaking-list") {
+        renderWordList("speaking");
+      }
     }
   };
 
@@ -1237,12 +2187,17 @@ function startRecognition(mode) {
       state.transcript = transcript;
       saveState();
       renderToday();
-    } else {
+    } else if (mode === "speaking-review") {
       state.review.speakingAttempt = transcript;
       state.review.speakingStatus = transcript
         ? `Recording: "${transcript}"`
         : "Recording";
+      state.review.speakingJudged = false;
       renderSpeakingReview();
+    } else if (mode === "speaking-list") {
+      speakingListPractice.attempt = transcript;
+      speakingListPractice.judged = false;
+      renderWordList("speaking");
     }
   };
 
@@ -1258,6 +2213,8 @@ function startRecognition(mode) {
       void maybeCompleteTodayPractice();
     } else if (endedMode === "speaking-review") {
       void maybeCompleteSpeakingReview();
+    } else if (endedMode === "speaking-list") {
+      void maybeCompleteSpeakingList();
     }
   };
 
@@ -1265,7 +2222,7 @@ function startRecognition(mode) {
   return true;
 }
 
-async function captureAudio(mode) {
+async function captureAudio(mode, targetWord = null) {
   if (mediaRecorder || activeRecognition) {
     showToast("Finish the current recording first.");
     return;
@@ -1281,13 +2238,20 @@ async function captureAudio(mode) {
     state.feedback = createEmptyFeedback();
     renderToday();
   } else {
-    speakingAudioBlob = null;
-    state.review.speakingAttempt = "";
-    state.review.speakingStatus = "Recording";
-    state.review.speakingJudged = false;
-    isSpeakingReviewProcessing = false;
-    speakingReviewAutoJudgeRequested = false;
-    renderSpeakingReview();
+    if (mode === "speaking-review") {
+      stopPlaybackAudio();
+      speakingAudioBlob = null;
+      state.review.speakingAttempt = "";
+      state.review.speakingStatus = "Recording";
+      state.review.speakingJudged = false;
+      isSpeakingReviewProcessing = false;
+      speakingReviewAutoJudgeRequested = false;
+      renderSpeakingReview();
+    } else if (mode === "speaking-list") {
+      resetSpeakingListPractice(targetWord);
+      speakingListPractice.word = targetWord;
+      renderWordList("speaking");
+    }
   }
 
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -1325,9 +2289,11 @@ async function captureAudio(mode) {
   };
 
   mediaRecorder.onstart = () => {
-    if (mode !== "today") {
+    if (mode === "speaking-review") {
       state.review.speakingStatus = "Recording";
       renderSpeakingReview();
+    } else if (mode === "speaking-list") {
+      renderWordList("speaking");
     }
   };
 
@@ -1335,10 +2301,13 @@ async function captureAudio(mode) {
     const blob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
     if (mode === "today") {
       dailyAudioBlob = blob;
-    } else {
+    } else if (mode === "speaking-review") {
       speakingAudioBlob = blob;
       state.review.speakingStatus = "Processing";
       renderSpeakingReview();
+    } else if (mode === "speaking-list") {
+      speakingListAudioBlob = blob;
+      renderWordList("speaking");
     }
 
     stream.getTracks().forEach((track) => track.stop());
@@ -1348,8 +2317,10 @@ async function captureAudio(mode) {
       isTodayRecording = false;
       updateTodayRecordingControls();
       void maybeCompleteTodayPractice();
-    } else {
+    } else if (mode === "speaking-review") {
       void maybeCompleteSpeakingReview();
+    } else if (mode === "speaking-list") {
+      void maybeCompleteSpeakingList();
     }
   };
 
@@ -1371,6 +2342,37 @@ function finishCapture(mode) {
     renderToday();
   }
 
+  if (mode !== "today") {
+    const isCaptureActive =
+      (activeRecognition && recognitionMode === mode) ||
+      (mediaRecorder && recordingMode === mode);
+
+    if (isCaptureActive) {
+      if (mode === "speaking-review") {
+        speakingReviewAutoJudgeRequested = true;
+        isSpeakingReviewProcessing = true;
+        state.review.speakingJudged = false;
+        state.review.speakingStatus = "Processing";
+        renderSpeakingReview();
+      } else if (mode === "speaking-list") {
+        speakingListAutoJudgeRequested = true;
+        isSpeakingListProcessing = true;
+        speakingListPractice.judged = false;
+        renderWordList("speaking");
+      }
+
+      if (activeRecognition && recognitionMode === mode) {
+        activeRecognition.stop();
+      }
+
+      if (mediaRecorder && recordingMode === mode) {
+        mediaRecorder.stop();
+      }
+
+      return;
+    }
+  }
+
   if (activeRecognition && recognitionMode === mode) {
     activeRecognition.stop();
   }
@@ -1383,22 +2385,36 @@ function finishCapture(mode) {
   if (mode === "today") {
     void maybeCompleteTodayPractice();
   } else {
-    if (!state.review.speakingAttempt.trim() && !speakingAudioBlob) {
-      showToast("Start speaking first.");
-      state.review.speakingStatus = "Say the word clearly, then press Finish.";
+    if (mode === "speaking-review") {
+      if (!state.review.speakingAttempt.trim() && !speakingAudioBlob) {
+        showToast("Start speaking first.");
+        state.review.speakingStatus = "Ready";
+        renderSpeakingReview();
+        return;
+      }
+      speakingReviewAutoJudgeRequested = true;
+      isSpeakingReviewProcessing = true;
+      state.review.speakingJudged = false;
+      state.review.speakingStatus = "Processing";
       renderSpeakingReview();
-      return;
+      void maybeCompleteSpeakingReview();
+    } else if (mode === "speaking-list") {
+      if (!speakingListPractice.attempt.trim() && !speakingListAudioBlob) {
+        showToast("Start speaking first.");
+        renderWordList("speaking");
+        return;
+      }
+      speakingListAutoJudgeRequested = true;
+      isSpeakingListProcessing = true;
+      speakingListPractice.judged = false;
+      renderWordList("speaking");
+      void maybeCompleteSpeakingList();
     }
-    speakingReviewAutoJudgeRequested = true;
-    isSpeakingReviewProcessing = true;
-    state.review.speakingJudged = false;
-    state.review.speakingStatus = "Processing";
-    renderSpeakingReview();
-    void maybeCompleteSpeakingReview();
   }
 }
 
 function restartTodayPractice() {
+  stopPlaybackAudio();
   todayTranscribeRequestId += 1;
   todayAutoSubmitRequested = false;
   todayPracticeFinished = false;
@@ -1421,6 +2437,14 @@ async function maybeCompleteSpeakingReview() {
   await judgeSpeakingWord(item.word);
 }
 
+async function maybeCompleteSpeakingList() {
+  if (!speakingListAutoJudgeRequested) return;
+  if (recordingMode === "speaking-list" || recognitionMode === "speaking-list") return;
+  if (!speakingListPractice.word) return;
+  speakingListAutoJudgeRequested = false;
+  await judgeSpeakingListWord(speakingListPractice.word);
+}
+
 async function saveTodayPracticeToHistory() {
   const payload = {
     date: todayPrompt.date,
@@ -1429,6 +2453,7 @@ async function saveTodayPracticeToHistory() {
     image: todayPrompt.image,
     originalTranscript: state.transcript,
     correctedTranscript: state.feedback.correctedTranscript || state.transcript || "",
+    score: typeof state.feedback.overallScore === "number" ? state.feedback.overallScore : 89,
   };
 
   try {
@@ -1484,13 +2509,11 @@ async function processTodayPractice() {
 
     await saveTodayPracticeToHistory();
     todayPracticeFinished = true;
-    dailyAudioBlob = null;
   } catch {
     if (state.transcript.trim()) {
       state.feedback = normalizeFeedback(analyzeTranscript(state.transcript));
       await saveTodayPracticeToHistory();
       todayPracticeFinished = true;
-      dailyAudioBlob = null;
       showToast("AI is unavailable. Using local feedback.");
     } else {
       todayPracticeFinished = false;
@@ -1571,7 +2594,7 @@ async function judgeSpeakingWord(word) {
   if (!item) return;
 
   if (!state.review.speakingAttempt.trim() && !speakingAudioBlob) {
-    state.review.speakingStatus = "Say the word clearly, then press Finish.";
+    state.review.speakingStatus = "Ready";
     isSpeakingReviewProcessing = false;
     state.review.speakingJudged = false;
     renderSpeakingReview();
@@ -1579,82 +2602,31 @@ async function judgeSpeakingWord(word) {
     return;
   }
 
-  if (apiConfigured) {
-    try {
-      const formData = new FormData();
-      formData.append("targetWord", word);
-      formData.append("attempt", state.review.speakingAttempt || "");
-      if (speakingAudioBlob) formData.append("audio", speakingAudioBlob, "speaking.webm");
-      const response = await fetch("/api/judge-word", {
-        method: "POST",
-        body: formData,
-      });
-      if (!response.ok) throw new Error("AI judge request failed.");
-      const result = await response.json();
-      state.review.speakingAttempt = result.heard || state.review.speakingAttempt;
-      try {
-        const reviewResponse = await fetch("/api/review/speaking", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ word, matched: result.matched }),
-        });
-        if (reviewResponse.ok) {
-          const reviewData = await reviewResponse.json();
-          state.speakingList = reviewData.list;
-        } else if (result.matched) item.rightCount += 1;
-        else item.wrongCount += 1;
-      } catch {
-        if (result.matched) item.rightCount += 1;
-        else item.wrongCount += 1;
-      }
-      saveState();
-      renderWordList("speaking");
-      state.review.speakingJudged = true;
-      isSpeakingReviewProcessing = false;
-      state.review.speakingStatus = result.matched
-        ? `AI result: correct pronunciation. Score ${result.score}/100. ${result.feedback}`
-        : `AI result: not correct yet. Score ${result.score}/100. ${result.feedback}`;
-      renderSpeakingReview();
-      return;
-    } catch {
-      showToast("AI judge failed. Using local fallback.");
-    }
-  }
-
-  const attempt = normalized(state.review.speakingAttempt || "");
-  const target = normalized(word);
-  const correct = attempt === target || attempt.includes(target);
-  try {
-    const reviewResponse = await fetch("/api/review/speaking", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ word, matched: correct }),
-    });
-    if (reviewResponse.ok) {
-      const reviewData = await reviewResponse.json();
-      state.speakingList = reviewData.list;
-    } else if (correct) item.rightCount += 1;
-    else item.wrongCount += 1;
-  } catch {
-    if (correct) item.rightCount += 1;
-    else item.wrongCount += 1;
-  }
+  const result = await getSpeakingJudgeResult(
+    word,
+    state.review.speakingAttempt,
+    speakingAudioBlob
+  ).catch(() => {
+    showToast("AI judge failed. Using local fallback.");
+    return getSpeakingJudgeResult(word, state.review.speakingAttempt, null);
+  });
+  const correct = result.passed;
+  speakingSessionResults.set(state.review.speakingIndex, correct ? "right" : "wrong");
+  state.review.speakingAttempt = result.heard || state.review.speakingAttempt;
+  await updateSpeakingWordRecord(word, correct);
   saveState();
   renderWordList("speaking");
   state.review.speakingJudged = true;
   isSpeakingReviewProcessing = false;
   state.review.speakingStatus = correct
-    ? `AI result: correct pronunciation. Score 90/100.`
-    : `AI result: not correct yet. Score 58/100. Try the ending sound again.`;
+    ? `AI result: correct pronunciation. Score ${result.score}/100. ${result.feedback || ""}`.trim()
+    : `AI result: not correct yet. Score ${result.score}/100. ${result.feedback || "Try the ending sound again."}`.trim();
   renderSpeakingReview();
 }
 
 document.querySelectorAll(".nav-link").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll(".nav-link").forEach((item) => item.classList.remove("is-active"));
-    Object.values(elements.views).forEach((view) => view.classList.remove("is-visible"));
-    button.classList.add("is-active");
-    elements.views[button.dataset.view].classList.add("is-visible");
+    switchToView(button.dataset.view);
   });
 });
 
@@ -1674,11 +2646,23 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
       document.querySelectorAll(`#${group}-lite-panel, #${group}-full-panel`).forEach((panel) => panel.classList.remove("is-visible"));
       button.classList.add("is-active");
       document.getElementById(`${button.dataset.wordMode}-panel`).classList.add("is-visible");
+      renderWordList(group);
+      return;
+    }
+
+    if (button.dataset.historyCardMode) {
+      document.querySelectorAll("[data-history-card-mode]").forEach((item) => item.classList.remove("is-active"));
+      button.classList.add("is-active");
+      historyCardMode = button.dataset.historyCardMode;
+      historyPage = 1;
+      renderHistory();
       return;
     }
 
     document.querySelectorAll(".toggle-button").forEach((item) => {
-      if (!item.dataset.wordMode && !item.dataset.reviewTab) item.classList.remove("is-active");
+      if (!item.dataset.wordMode && !item.dataset.reviewTab && !item.dataset.historyCardMode) {
+        item.classList.remove("is-active");
+      }
     });
     document.querySelectorAll(".model-copy").forEach((copy) => copy.classList.remove("is-visible"));
     button.classList.add("is-active");
@@ -1687,6 +2671,18 @@ document.querySelectorAll(".toggle-button").forEach((button) => {
 });
 
 document.addEventListener("click", (event) => {
+  const historySelectControl = event.target.closest("[data-history-select]");
+  if (historySelectControl) {
+    event.stopPropagation();
+    return;
+  }
+
+  const wordSelectControl = event.target.closest("[data-list-select-word]");
+  if (wordSelectControl) {
+    event.stopPropagation();
+    return;
+  }
+
   const audioButton = event.target.closest("[data-word-audio]");
   if (audioButton) {
     speakWord(audioButton.dataset.wordAudio);
@@ -1726,16 +2722,7 @@ document.addEventListener("click", (event) => {
   const practiceButton = event.target.closest("[data-practice-word]");
   if (practiceButton) {
     event.stopPropagation();
-    state.review.speakingIndex = state.speakingList.findIndex(
-      (item) => item.word === practiceButton.dataset.practiceWord
-    );
-    state.review.speakingAttempt = "";
-    state.review.speakingStatus = "Say the word clearly, then press Finish.";
-    state.review.speakingJudged = false;
-    isSpeakingReviewProcessing = false;
-    speakingAudioBlob = null;
-    saveState();
-    renderSpeakingReview();
+    openSpeakingReviewTab([practiceButton.dataset.practiceWord]);
     showToast(`Start "${practiceButton.dataset.practiceWord}"`);
     return;
   }
@@ -1744,23 +2731,52 @@ document.addEventListener("click", (event) => {
   if (judgeButton) {
     event.stopPropagation();
     const word = judgeButton.dataset.judgeWord;
-    state.review.speakingIndex = state.speakingList.findIndex((item) => item.word === word);
-    state.review.speakingAttempt = "";
-    state.review.speakingStatus = "Say the word clearly, then press Finish.";
-    state.review.speakingJudged = false;
-    isSpeakingReviewProcessing = false;
-    speakingAudioBlob = null;
-    document.querySelectorAll(".nav-link").forEach((item) => item.classList.remove("is-active"));
-    Object.values(elements.views).forEach((view) => view.classList.remove("is-visible"));
-    document.querySelector('.nav-link[data-view="settings"]').classList.add("is-active");
-    elements.views.settings.classList.add("is-visible");
-    document.querySelectorAll("[data-review-tab]").forEach((item) => {
-      item.classList.toggle("is-active", item.dataset.reviewTab === "speaking");
-    });
-    document.querySelectorAll(".review-tab").forEach((tab) => tab.classList.remove("is-visible"));
-    document.getElementById("review-tab-speaking").classList.add("is-visible");
-    renderSpeakingReview();
+    openSpeakingReviewTab([word]);
     showToast(`Finish "${word}" in Review`);
+    return;
+  }
+
+  const speakingListStartButton = event.target.closest("[data-speaking-list-start]");
+  if (speakingListStartButton) {
+    event.stopPropagation();
+    if (
+      (mediaRecorder && recordingMode === "speaking-list") ||
+      (activeRecognition && recognitionMode === "speaking-list")
+    ) {
+      showToast("Press Finish to stop and judge this word.");
+      return;
+    }
+    captureAudio("speaking-list", speakingListStartButton.dataset.speakingListStart);
+    return;
+  }
+
+  const speakingListFinishButton = event.target.closest("[data-speaking-list-finish]");
+  if (speakingListFinishButton) {
+    event.stopPropagation();
+    speakingListPractice.word = speakingListFinishButton.dataset.speakingListFinish;
+    finishCapture("speaking-list");
+    return;
+  }
+
+  const speakingListRetryButton = event.target.closest("[data-speaking-list-retry]");
+  if (speakingListRetryButton) {
+    event.stopPropagation();
+    resetSpeakingListPractice(speakingListRetryButton.dataset.speakingListRetry);
+    renderWordList("speaking");
+    return;
+  }
+
+  const speakingListOriginalButton = event.target.closest("[data-speaking-list-original]");
+  if (speakingListOriginalButton) {
+    event.stopPropagation();
+    if (
+      speakingListPractice.word !== speakingListOriginalButton.dataset.speakingListOriginal ||
+      !speakingListAudioBlob
+    ) {
+      showToast("No original recording available yet.");
+      return;
+    }
+    playOriginalAudio(speakingListAudioBlob);
     return;
   }
 
@@ -1776,7 +2792,7 @@ document.addEventListener("click", (event) => {
       elements.drawerWord.textContent = word;
       elements.drawerAudio.setAttribute("aria-label", `Play pronunciation for ${word}`);
       elements.drawerPhonetic.textContent = entry.phonetic;
-      elements.drawerMeaning.textContent = entry.meaning;
+      elements.drawerMeaning.textContent = `Meaning: ${entry.meaning}`;
       elements.drawerExample.textContent = `Example: "${entry.example}"`;
       elements.drawer.dataset.word = word;
       elements.drawer.classList.add("is-open");
@@ -1784,6 +2800,22 @@ document.addEventListener("click", (event) => {
     }
     return;
   }
+});
+
+document.addEventListener("change", (event) => {
+  const historySelectControl = event.target.closest?.("[data-history-select]");
+  if (historySelectControl) {
+    toggleHistorySelection(historySelectControl.dataset.historySelect, historySelectControl.checked);
+    return;
+  }
+
+  const wordSelectControl = event.target.closest?.("[data-list-select-word]");
+  if (!wordSelectControl) return;
+  toggleWordSelection(
+    wordSelectControl.dataset.listSelectName,
+    wordSelectControl.dataset.listSelectWord,
+    event.target.checked
+  );
 });
 
 document.addEventListener("keydown", async (event) => {
@@ -1822,23 +2854,57 @@ elements.startSpeakingButton.addEventListener("click", () => captureAudio("today
 elements.finishSpeakingButton.addEventListener("click", () => finishCapture("today"));
 elements.testMicButton.addEventListener("click", () => testMicrophone());
 elements.restartSpeakingButton.addEventListener("click", () => restartTodayPractice());
+elements.playOriginalSpeakingButton.addEventListener("click", () => {
+  playOriginalAudio(dailyAudioBlob);
+});
 
 elements.historySearch.addEventListener("input", () => {
   historyPage = 1;
+  clearHistorySelection();
   renderHistory();
 });
 elements.historyDate.addEventListener("change", () => {
   historyPage = 1;
+  historyFilterMode = elements.historyDate.value ? "date" : "all";
+  clearHistorySelection();
   renderHistory();
 });
-elements.monthButtons.forEach((button) =>
-  button.addEventListener("click", () => {
-    currentMonth = button.dataset.month;
-    historyPage = 1;
-    elements.monthButtons.forEach((item) => item.classList.toggle("is-active", item === button));
-    renderHistory();
-  })
-);
+elements.historyAllButton.addEventListener("click", () => {
+  historyFilterMode = "all";
+  elements.historyDate.value = "";
+  historyPage = 1;
+  clearHistorySelection();
+  renderHistory();
+});
+elements.historyMonthModeButton.addEventListener("click", () => {
+  historyFilterMode = "month";
+  elements.historyDate.value = "";
+  historyPage = 1;
+  clearHistorySelection();
+  renderHistory();
+});
+elements.historyDateModeButton.addEventListener("click", () => {
+  historyFilterMode = "date";
+  historyPage = 1;
+  clearHistorySelection();
+  renderHistory();
+});
+elements.historyYear.addEventListener("change", () => {
+  historyFilterMode = "month";
+  historyYear = elements.historyYear.value;
+  elements.historyDate.value = "";
+  historyPage = 1;
+  clearHistorySelection();
+  renderHistory();
+});
+elements.historyMonth.addEventListener("change", () => {
+  historyFilterMode = "month";
+  historyMonth = elements.historyMonth.value;
+  elements.historyDate.value = "";
+  historyPage = 1;
+  clearHistorySelection();
+  renderHistory();
+});
 elements.historyPrev.addEventListener("click", () => {
   if (historyPage > 1) historyPage -= 1;
   renderHistory();
@@ -1847,28 +2913,28 @@ elements.historyNext.addEventListener("click", () => {
   historyPage += 1;
   renderHistory();
 });
-document.getElementById("open-months").addEventListener("click", () => {
-  document.getElementById("month-strip").scrollIntoView({ behavior: "smooth", block: "center" });
-});
-document.getElementById("jump-today-history").addEventListener("click", () => {
-  currentMonth = "all";
-  historyPage = 1;
-  elements.historySearch.value = "";
-  elements.historyDate.value = "";
-  elements.monthButtons.forEach((item) => item.classList.toggle("is-active", item.dataset.month === "all"));
-  renderHistory();
-});
 elements.deleteAllHistory.addEventListener("click", () => {
   deleteAllHistory();
+});
+elements.selectAllHistoryButton.addEventListener("click", () => {
+  selectAllFilteredHistory();
 });
 
 elements.vocabularySearch.addEventListener("input", () => {
   readingPage = 1;
+  clearWordSelection("reading");
   renderWordList("reading");
 });
 elements.vocabularySort.addEventListener("change", () => {
   readingPage = 1;
+  clearWordSelection("reading");
   renderWordList("reading");
+});
+elements.selectAllReadingButton.addEventListener("click", () => {
+  selectAllFilteredWords("reading");
+});
+elements.deleteSelectedReadingButton.addEventListener("click", () => {
+  deleteSelectedWords("reading");
 });
 elements.vocabularyPrev.addEventListener("click", () => {
   if (readingPage > 1) readingPage -= 1;
@@ -1881,11 +2947,19 @@ elements.vocabularyNext.addEventListener("click", () => {
 
 elements.speakingSearch.addEventListener("input", () => {
   speakingPage = 1;
+  clearWordSelection("speaking");
   renderWordList("speaking");
 });
 elements.speakingSort.addEventListener("change", () => {
   speakingPage = 1;
+  clearWordSelection("speaking");
   renderWordList("speaking");
+});
+elements.selectAllSpeakingButton.addEventListener("click", () => {
+  selectAllFilteredWords("speaking");
+});
+elements.deleteSelectedSpeakingButton.addEventListener("click", () => {
+  deleteSelectedWords("speaking");
 });
 elements.speakingPrev.addEventListener("click", () => {
   if (speakingPage > 1) speakingPage -= 1;
@@ -1897,30 +2971,42 @@ elements.speakingNext.addEventListener("click", () => {
 });
 
 elements.startReadingReview.addEventListener("click", () => {
-  const count = parseInt(elements.readingReviewCount.value, 10) || 10;
-  state.review.readingQueue = state.readingList.slice(0, count).map((item) => item.word);
-  state.review.readingIndex = 0;
-  state.review.readingPending = null;
-  saveState();
-  renderReadingReview();
+  startReadingReviewSession();
+});
+elements.finishReadingReview.addEventListener("click", async () => {
+  await finishReadingReviewSession();
 });
 elements.reviewYes.addEventListener("click", () => {
+  if (!state.review.readingActive) return;
+  state.review.readingChoice = "yes";
   state.review.readingPending = "right";
-  elements.readingReviewMeaningPanel.classList.remove("is-hidden");
+  renderReadingReview();
 });
 elements.reviewNo.addEventListener("click", () => {
+  if (!state.review.readingActive) return;
+  state.review.readingChoice = "no";
   state.review.readingPending = "wrong";
-  elements.readingReviewMeaningPanel.classList.remove("is-hidden");
+  renderReadingReview();
 });
 elements.readingReviewWrong.addEventListener("click", () => {
+  if (!state.review.readingActive || !state.review.readingChoice) return;
+  state.review.readingChoice = "remember-wrong";
   state.review.readingPending = "wrong";
-  elements.readingReviewMeaningPanel.classList.remove("is-hidden");
+  renderReadingReview();
 });
 elements.readingReviewPrev.addEventListener("click", () => {
+  if (!state.review.readingActive) return;
   if (state.review.readingIndex > 0) state.review.readingIndex -= 1;
+  state.review.readingChoice = null;
+  state.review.readingPending = null;
   renderReadingReview();
 });
 elements.readingReviewNext.addEventListener("click", async () => {
+  if (!state.review.readingActive) return;
+  if (state.review.readingIndex >= state.review.readingQueue.length - 1) {
+    await finishReadingReviewSession();
+    return;
+  }
   await commitReadingPending();
   if (state.review.readingIndex < state.review.readingQueue.length - 1) state.review.readingIndex += 1;
   renderReadingReview();
@@ -1930,6 +3016,12 @@ elements.readingReviewAudio.addEventListener("click", () => {
   if (item) speakWord(item.word);
 });
 
+elements.startSpeakingSession.addEventListener("click", () => {
+  startSpeakingReviewSession();
+});
+elements.finishSpeakingSession.addEventListener("click", () => {
+  finishSpeakingReviewSession();
+});
 elements.startSpeakingReview.addEventListener("click", () => {
   if (mediaRecorder && recordingMode === "speaking-review") {
     showToast("Press Finish to stop and judge this word.");
@@ -1944,21 +3036,36 @@ elements.startSpeakingReview.addEventListener("click", () => {
 elements.runAiJudge.addEventListener("click", async () => {
   finishCapture("speaking-review");
 });
+elements.retrySpeakingReview.addEventListener("click", () => {
+  retrySpeakingReviewAttempt();
+});
+elements.originalSpeakingReview.addEventListener("click", () => {
+  playOriginalAudio(speakingAudioBlob);
+});
 elements.speakingReviewPrev.addEventListener("click", () => {
+  if (!state.review.speakingActive) return;
   if (state.review.speakingIndex > 0) state.review.speakingIndex -= 1;
   state.review.speakingAttempt = "";
-  state.review.speakingStatus = "Say the word clearly, then press Finish.";
+  state.review.speakingStatus = "Ready";
   state.review.speakingJudged = false;
   isSpeakingReviewProcessing = false;
+  stopPlaybackAudio();
   speakingAudioBlob = null;
   renderSpeakingReview();
 });
 elements.speakingReviewNext.addEventListener("click", () => {
-  if (state.review.speakingIndex < state.speakingList.length - 1) state.review.speakingIndex += 1;
+  if (!state.review.speakingActive) return;
+  if (!state.review.speakingJudged) return;
+  if (state.review.speakingIndex >= state.review.speakingQueue.length - 1) {
+    finishSpeakingReviewSession();
+    return;
+  }
+  if (state.review.speakingIndex < state.review.speakingQueue.length - 1) state.review.speakingIndex += 1;
   state.review.speakingAttempt = "";
-  state.review.speakingStatus = "Say the word clearly, then press Finish.";
+  state.review.speakingStatus = "Ready";
   state.review.speakingJudged = false;
   isSpeakingReviewProcessing = false;
+  stopPlaybackAudio();
   speakingAudioBlob = null;
   renderSpeakingReview();
 });
@@ -1983,8 +3090,17 @@ elements.addSpeaking.addEventListener("click", () => {
 elements.closeHistoryPreview.addEventListener("click", () => {
   closeHistoryPreview();
 });
+elements.closeReviewSummary.addEventListener("click", () => {
+  closeReviewSummary();
+});
+elements.openHistoryDetails.addEventListener("click", () => {
+  if (activeHistoryPreviewId) openHistoryDetailsInToday(activeHistoryPreviewId);
+});
 elements.deleteHistoryEntry.addEventListener("click", () => {
   if (activeHistoryPreviewId) deleteHistory(activeHistoryPreviewId);
+});
+elements.backToTodayButton.addEventListener("click", () => {
+  returnToLiveToday();
 });
 elements.historyPreviewBackdrop.addEventListener("click", (event) => {
   if (event.target === elements.historyPreviewBackdrop) {

@@ -95,7 +95,7 @@ app.post("/api/review/speaking", (req, res) => {
 });
 
 app.post("/api/history", (req, res) => {
-  const { title, summary, image, date, originalTranscript, correctedTranscript } = req.body;
+  const { title, summary, image, date, originalTranscript, correctedTranscript, score } = req.body;
   const bootstrap = getBootstrap(formatIsoDate(new Date()));
   const history = addHistoryEntry({
     id: `hist-${Date.now()}`,
@@ -103,6 +103,7 @@ app.post("/api/history", (req, res) => {
     summary: summary || "",
     image: image || bootstrap.todayPrompt.image,
     date: date || formatIsoDate(new Date()),
+    score: typeof score === "number" ? clamp(Math.round(score), 0, 100) : 89,
     originalTranscript: originalTranscript || "",
     correctedTranscript: correctedTranscript || "",
   });
@@ -170,7 +171,8 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
                 `Picture prompt: ${promptTitle}\n` +
                 `Picture image URL for context: ${imageUrl || "not provided"}\n` +
                 `Learner transcript: ${transcript}\n\n` +
-                `Return only valid JSON with keys grammarOriginal, grammarCorrected, grammarNote, overallSuggestion, correctedTranscript, pronunciationWords, easy, advanced, keywords.\n` +
+                `Return only valid JSON with keys grammarOriginal, grammarCorrected, grammarNote, overallSuggestion, correctedTranscript, overallScore, pronunciationWords, easy, advanced, keywords.\n` +
+                `overallScore must be an integer from 0 to 100 that rates the overall spoken description quality.\n` +
                 `pronunciationWords and keywords must be arrays of strings.\n` +
                 `Keep explanations short and simple.\n` +
                 `overallSuggestion should be one short general coaching suggestion about the full recording.\n` +
@@ -204,6 +206,10 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
           parsed.grammarNote ||
           "Try speaking a little more slowly and keep each sentence clear and direct.",
         correctedTranscript: parsed.correctedTranscript || transcript,
+        overallScore:
+          typeof parsed.overallScore === "number"
+            ? clamp(Math.round(parsed.overallScore), 0, 100)
+            : 89,
         pronunciationWords: Array.isArray(parsed.pronunciationWords)
           ? parsed.pronunciationWords.slice(0, 4)
           : [],
@@ -260,6 +266,9 @@ app.post("/api/judge-word", upload.single("audio"), async (req, res) => {
                 `Return only valid JSON with keys score and feedback.\n` +
                 `score must be an integer 0-100.\n` +
                 `feedback must be one short sentence.\n` +
+                `Judge conservatively because this is transcript-based, not phoneme-level audio scoring.\n` +
+                `Do not default to 94 for exact transcript matches.\n` +
+                `If the transcript exactly matches the target word, a typical score should usually stay in the 84-90 range unless the transcript itself suggests a problem.\n` +
                 `Judge carefully but acknowledge this is approximate because the input is transcript-based.`,
             },
           ],
@@ -284,10 +293,10 @@ app.post("/api/judge-word", upload.single("audio"), async (req, res) => {
       score,
       feedback:
         parsed.feedback ||
-        (score >= 85
+        (score > 80
           ? "Very close. Your pronunciation sounds clear for this word."
           : "Not clear enough yet. Try listening once more and repeating it."),
-      matched: score >= 85,
+      matched: score > 80,
     });
   } catch (error) {
     console.error("/api/judge-word failed", error);
@@ -302,7 +311,7 @@ app.use((_req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Describer v1.1 running on http://localhost:${port}`);
+  console.log(`Describer v2.0 running on http://localhost:${port}`);
 });
 
 function safeJson(text) {
@@ -327,11 +336,11 @@ function similarityScore(target, heard) {
   const a = normalizeWord(target);
   const b = normalizeWord(heard);
   if (!a || !b) return 20;
-  if (a === b) return 94;
-  if (b.includes(a) || a.includes(b)) return 84;
+  if (a === b) return 88;
+  if (b.includes(a) || a.includes(b)) return 78;
   const distance = levenshtein(a, b);
   const maxLen = Math.max(a.length, b.length, 1);
-  return clamp(Math.round((1 - distance / maxLen) * 100), 20, 90);
+  return clamp(Math.round((1 - distance / maxLen) * 100), 20, 82);
 }
 
 function levenshtein(a, b) {

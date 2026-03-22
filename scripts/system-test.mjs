@@ -31,7 +31,7 @@ async function testHomePage() {
   assert(response.ok, "Home page should load.");
   const html = await response.text();
   assert(html.includes("Describer"), "Home page should include app title.");
-  assert(html.includes("v1.1"), "Home page should include app version.");
+  assert(html.includes("v2.0"), "Home page should include app version.");
 }
 
 async function testHealth() {
