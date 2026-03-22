@@ -57,22 +57,30 @@ button {
 
 .brand {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 14px;
   margin-bottom: 20px;
 }
 
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
 .brand-mark {
-  width: 52px;
-  height: 52px;
-  border-radius: 18px;
+  width: 68px;
+  min-height: 88px;
+  border-radius: 22px;
   display: grid;
   place-items: center;
   font-family: "DM Serif Display", serif;
-  font-size: 1.5rem;
+  font-size: 2rem;
   color: #fff;
   background: linear-gradient(145deg, #174c5a, #2f6a6b);
   box-shadow: var(--shadow);
+  flex-shrink: 0;
 }
 
 .brand h1,
@@ -86,6 +94,15 @@ button {
   font-family: "DM Serif Display", serif;
   font-weight: 400;
   letter-spacing: 0.01em;
+}
+
+.brand-version {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .eyebrow {
@@ -546,6 +563,10 @@ button {
   border-radius: 6px;
   background: rgba(180, 60, 47, 0.12);
   color: #a63c2f;
+}
+
+.inline-word-select {
+  cursor: pointer;
 }
 
 .feedback-empty {
@@ -1126,6 +1147,20 @@ button {
   margin-top: 12px;
   flex-wrap: wrap;
   justify-content: flex-start;
+}
+
+.drawer-word-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drawer-audio-button {
+  width: 44px;
+  height: 44px;
+  font-size: 1.1rem;
+  flex-shrink: 0;
 }
 
 @media (max-width: 1120px) {

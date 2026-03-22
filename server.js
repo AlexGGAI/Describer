@@ -60,14 +60,15 @@ app.get("/api/health", (_req, res) => {
 
 app.post("/api/words", async (req, res) => {
   const { word, listName, savedAt } = req.body;
-  if (!word || !listName) {
+  const normalizedWord = normalizeWordForSave(word);
+  if (!normalizedWord || !listName) {
     return res.status(400).json({ error: "word and listName are required." });
   }
 
-  const details = await lookupWordDetails(word);
+  const details = await lookupWordDetails(normalizedWord);
   const list = addWord({
     listName,
-    word,
+    word: normalizedWord,
     savedAt: savedAt || formatIsoDate(new Date()),
     ...details,
   });
@@ -301,7 +302,7 @@ app.use((_req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`V1.0 running on http://localhost:${port}`);
+  console.log(`Describer v1.1 running on http://localhost:${port}`);
 });
 
 function safeJson(text) {
@@ -456,6 +457,38 @@ function emptyWordDetails(word) {
     meaning: `Useful word related to "${word}".`,
     example: `I can use "${word}" when I describe a picture.`,
   };
+}
+
+function normalizeWordForSave(word) {
+  const compact = String(word || "").replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+
+  const tokens = compact.split(" ");
+  const capitalizedTokenCount = tokens.filter((token) => {
+    const lettersOnly = token.replace(/[^A-Za-z]/g, "");
+    return (
+      lettersOnly.length > 0 &&
+      lettersOnly[0] === lettersOnly[0].toUpperCase() &&
+      lettersOnly.slice(1) === lettersOnly.slice(1).toLowerCase()
+    );
+  }).length;
+  const preserveTitleCasePhrase = capitalizedTokenCount > 1;
+
+  return tokens
+    .map((token) => {
+      const lettersOnly = token.replace(/[^A-Za-z]/g, "");
+      if (!lettersOnly) return token;
+      if (lettersOnly.length >= 2 && lettersOnly === lettersOnly.toUpperCase()) return token;
+      if (preserveTitleCasePhrase) {
+        const isTitleCase =
+          lettersOnly[0] === lettersOnly[0].toUpperCase() &&
+          lettersOnly.slice(1) === lettersOnly.slice(1).toLowerCase();
+        if (isTitleCase) return token;
+      }
+      if (/[A-Z]/.test(token.slice(1)) && /[a-z]/.test(token)) return token;
+      return token.toLowerCase();
+    })
+    .join(" ");
 }
 
 const defaultWordLibrary = {

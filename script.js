@@ -256,11 +256,11 @@ const elements = {
   speakingReviewNext: document.getElementById("speaking-review-next"),
   drawer: document.getElementById("word-drawer"),
   drawerWord: document.getElementById("drawer-word"),
+  drawerAudio: document.getElementById("drawer-audio"),
   drawerPhonetic: document.getElementById("drawer-phonetic"),
   drawerMeaning: document.getElementById("drawer-meaning"),
   drawerExample: document.getElementById("drawer-example"),
   closeDrawer: document.getElementById("close-drawer"),
-  playAudio: document.getElementById("play-audio"),
   addReading: document.getElementById("add-vocabulary"),
   addSpeaking: document.getElementById("add-speaking"),
   historyPreviewBackdrop: document.getElementById("history-preview-backdrop"),
@@ -484,6 +484,58 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function isTypingTarget(target) {
+  if (!target) return false;
+  const tagName = target.tagName?.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select"
+  );
+}
+
+function getMouseSelectedText() {
+  const rawSelection = window.getSelection?.()?.toString?.() || "";
+  const normalizedSelection = rawSelection
+    .replace(/\s+/g, " ")
+    .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")
+    .trim();
+  return normalizedSelection;
+}
+
+function normalizeWordForSave(word) {
+  const compact = String(word || "").replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+
+  const tokens = compact.split(" ");
+  const capitalizedTokenCount = tokens.filter((token) => {
+    const lettersOnly = token.replace(/[^A-Za-z]/g, "");
+    return (
+      lettersOnly.length > 0 &&
+      lettersOnly[0] === lettersOnly[0].toUpperCase() &&
+      lettersOnly.slice(1) === lettersOnly.slice(1).toLowerCase()
+    );
+  }).length;
+  const preserveTitleCasePhrase = capitalizedTokenCount > 1;
+
+  return tokens
+    .map((token) => {
+      const lettersOnly = token.replace(/[^A-Za-z]/g, "");
+      if (!lettersOnly) return token;
+      if (lettersOnly.length >= 2 && lettersOnly === lettersOnly.toUpperCase()) return token;
+      if (preserveTitleCasePhrase) {
+        const isTitleCase =
+          lettersOnly[0] === lettersOnly[0].toUpperCase() &&
+          lettersOnly.slice(1) === lettersOnly.slice(1).toLowerCase();
+        if (isTitleCase) return token;
+      }
+      if (/[A-Z]/.test(token.slice(1)) && /[a-z]/.test(token)) return token;
+      return token.toLowerCase();
+    })
+    .join(" ");
+}
+
 function splitIntoSentences(text) {
   const cleaned = String(text || "").trim();
   if (!cleaned) return [];
@@ -628,7 +680,14 @@ function highlightOriginalSentence(originalText, correctedText) {
       const comparable = comparableToken(token);
       if (!comparable) return escapeHtml(token);
       if (matchedIndexes.has(index)) return escapeHtml(token);
-      return `<span class="mistake grammar">${escapeHtml(token)}</span>`;
+      return `
+        <span
+          class="mistake grammar inline-word-select"
+          data-word-select="${escapeHtml(comparable)}"
+        >
+          ${escapeHtml(token)}
+        </span>
+      `;
     })
     .join("");
 }
@@ -687,27 +746,32 @@ function renderGrammarFeedback(originalText, correctedText) {
 }
 
 async function saveWordToList(word, listName) {
+  const normalizedWord = normalizeWordForSave(word);
+  if (!normalizedWord) {
+    showToast("Please select a valid word first.");
+    return;
+  }
   const listKey = listName === "reading" ? "readingList" : "speakingList";
   try {
     const response = await fetch("/api/words", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ word, listName, savedAt: todayPrompt.date }),
+      body: JSON.stringify({ word: normalizedWord, listName, savedAt: todayPrompt.date }),
     });
     if (response.ok) {
       const data = await response.json();
       state[listKey] = data.list;
-    } else if (!state[listKey].some((item) => item.word === word)) {
-      state[listKey].unshift(createWord(word, todayPrompt.date));
+    } else if (!state[listKey].some((item) => item.word.toLowerCase() === normalizedWord.toLowerCase())) {
+      state[listKey].unshift(createWord(normalizedWord, todayPrompt.date));
     }
   } catch {
-    if (!state[listKey].some((item) => item.word === word)) {
-      state[listKey].unshift(createWord(word, todayPrompt.date));
+    if (!state[listKey].some((item) => item.word.toLowerCase() === normalizedWord.toLowerCase())) {
+      state[listKey].unshift(createWord(normalizedWord, todayPrompt.date));
     }
   }
   saveState();
   renderAll();
-  showToast(`Saved "${word}" to ${listName === "reading" ? "Reading" : "Speaking"}`);
+  showToast(`Saved "${normalizedWord}" to ${listName === "reading" ? "Reading" : "Speaking"}`);
 }
 
 async function removeWordFromList(word, listName) {
@@ -998,7 +1062,7 @@ function renderWordList(listName) {
   liteList.innerHTML = visible
     .map(
       (item) => `
-        <div class="lite-word-row" data-word-select="${item.word}">
+        <div class="lite-word-row" data-word-select="${item.word}" data-word-surface="lite">
           <strong>${item.word}</strong>
           <div class="lite-word-actions">
             <button class="inline-audio-button" data-word-audio="${item.word}" aria-label="Play pronunciation for ${item.word}">&#128264;</button>
@@ -1012,7 +1076,7 @@ function renderWordList(listName) {
   fullPanel.innerHTML = visible
     .map(
       (item) => `
-        <article class="panel practice-target word-card-entry ${listName === "reading" ? "word-entry" : ""}" data-word-list="${listName}" data-word="${item.word}" data-word-select="${item.word}">
+        <article class="panel practice-target word-card-entry ${listName === "reading" ? "word-entry" : ""}" data-word-list="${listName}" data-word="${item.word}" data-word-select="${item.word}" data-word-surface="full">
           <div class="target-top">
             <div>
               <p class="eyebrow">${formatDateLabel(item.savedAt)}</p>
@@ -1704,9 +1768,13 @@ document.addEventListener("click", (event) => {
   if (wordButton) {
     const word = wordButton.dataset.wordSelect;
     setSelectedWord(word, wordButton);
+    if (wordButton.dataset.wordSurface === "full") {
+      return;
+    }
     const entry = lookupWordEntry(word);
     if (entry) {
       elements.drawerWord.textContent = word;
+      elements.drawerAudio.setAttribute("aria-label", `Play pronunciation for ${word}`);
       elements.drawerPhonetic.textContent = entry.phonetic;
       elements.drawerMeaning.textContent = entry.meaning;
       elements.drawerExample.textContent = `Example: "${entry.example}"`;
@@ -1733,8 +1801,21 @@ document.addEventListener("keydown", async (event) => {
     return;
   }
 
-  if (key === "r" && selectedWord) await saveWordToList(selectedWord, "reading");
-  if (key === "s" && selectedWord) await saveWordToList(selectedWord, "speaking");
+  if (isTypingTarget(event.target)) return;
+  if (key !== "r" && key !== "s") return;
+
+  event.preventDefault();
+
+  const highlightedText = getMouseSelectedText();
+  const wordToSave = highlightedText || selectedWord;
+
+  if (!wordToSave) {
+    showToast("Highlight text or click a word first.");
+    return;
+  }
+
+  if (key === "r") await saveWordToList(wordToSave, "reading");
+  if (key === "s") await saveWordToList(wordToSave, "speaking");
 });
 
 elements.startSpeakingButton.addEventListener("click", () => captureAudio("today"));
@@ -1890,7 +1971,9 @@ elements.closeDrawer.addEventListener("click", () => {
   elements.drawer.classList.remove("is-open");
   elements.drawer.setAttribute("aria-hidden", "true");
 });
-elements.playAudio.addEventListener("click", () => speakWord(elements.drawer.dataset.word));
+elements.drawerAudio.addEventListener("click", () => {
+  if (elements.drawer.dataset.word) speakWord(elements.drawer.dataset.word);
+});
 elements.addReading.addEventListener("click", () => {
   if (elements.drawer.dataset.word) saveWordToList(elements.drawer.dataset.word, "reading");
 });
